@@ -2,6 +2,8 @@
 
 ## 基础
 
+![img](README.assets/bpic.588ku.com&app=2002&size=f9999,10000&q=a80&n=0&g=0n&fmt=jpeg)
+
 ## Java集合框架
 
 ## JUC并发编程
