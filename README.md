@@ -458,6 +458,154 @@ public void testStreamToArray() {
 }
 ```
 
+
+
+15. 对流中数据进行聚合计算
+
+```java
+@Test
+public void testStreamToOther() {
+    Stream<Student> studentStream = Stream.of(
+    new Student("赵丽颖", 58, 95),
+    new Student("杨颖", 56, 88),
+    new Student("迪丽热巴", 56, 99),
+    new Student("柳岩", 52, 77));
+    
+    // 获取最大值
+    // Optional<Student> collect = studentStream.collect(Collectors.maxBy((o1, o2) ->
+    o1.getSocre() - o2.getSocre()));
+    
+    // 获取最小值
+    // Optional<Student> collect = studentStream.collect(Collectors.minBy((o1, o2) ->
+    o1.getSocre() - o2.getSocre()));
+    // System.out.println(collect.get());
+    
+    // 求总和
+    // int sumAge = studentStream.collect(Collectors.summingInt(s -> s.getAge()));
+    // System.out.println("sumAge = " + sumAge);
+    
+    // 平均值
+    // double avgScore = studentStream.collect(Collectors.averagingInt(s -> s.getSocre()));
+    // System.out.println("avgScore = " + avgScore);
+    
+    // 统计数量
+    // Long count = studentStream.collect(Collectors.counting());
+    // System.out.println("count = " + count);
+}
+```
+
+
+
+16. 对流中数据进行分组
+
+```java
+// 分组
+    @Test
+    public void testGroup() {
+        Stream<Person> studentStream = Stream.of(
+                new Person("赵丽颖", 52, 95),
+                new Person("杨颖", 56, 88),
+                new Person("迪丽热巴", 56, 55),
+                new Person("柳岩", 52, 33));
+
+        // Map<Integer, List<Student>> map =
+//        studentStream.collect(Collectors.groupingBy(Person::getAge));
+        
+        // 将分数大于60的分为一组,小于60分成另一组
+        Map<String, List<Person>> map = studentStream.collect(Collectors.groupingBy((s) ->
+        {
+            if (s.getScore() > 60) {
+                return "及格";
+            } else {
+                return "不及格";
+            }
+        }));
+        map.forEach((k, v) -> {
+            System.out.println(k + "::" + v);
+        });
+    }
+```
+
+
+
+17. 对流中数据进行多级分组
+
+```java
+// 多级分组
+    @Test
+    public void testGroup() {
+        Stream<Person> stream = Stream.of(
+                new Person("赵丽颖", 52, 95),
+                new Person("杨颖", 56, 88),
+                new Person("迪丽热巴", 56, 55),
+                new Person("柳岩", 52, 33));
+
+        // 将分数大于60的分为一组,小于60分成另一组
+        Map<Integer, Map<String, List<Person>>> map = stream.collect(Collectors.groupingBy(Person::getAge, Collectors.groupingBy(s -> {
+            if (s.getScore() >= 60) {
+                return "及格";
+            } else {
+                return "不及格";
+            }
+        })));
+
+        map.forEach((k,v)->{
+            System.out.println(k);
+            v.forEach((k2,v2)->{
+                System.out.println("\t"+"k2:"+k2+"，v2:"+v2);
+            });
+        });
+    }
+```
+
+效果：
+
+![image-20220122120658974](README.assets/image-20220122120658974.png)
+
+18. 对流中数据进行分区
+
+```java
+// 分区
+    @Test
+    public void testPartition() {
+        Stream<Person> studentStream = Stream.of(
+                new Person("赵丽颖", 52, 95),
+                new Person("杨颖", 56, 88),
+                new Person("迪丽热巴", 56, 99),
+                new Person("柳岩", 52, 77));
+        // partitioningBy会根据值是否为true，把集合分割为两个列表，一个true列表，一个false列表。
+        Map<Boolean, List<Person>> map = studentStream.collect(Collectors.partitioningBy(s ->
+                s.getScore() > 90));
+        map.forEach((k, v) -> {
+            System.out.println(k + " == " + v);
+        });
+    }
+```
+
+
+
+19. 对流中数据进行拼接
+
+```java
+// 拼接
+    @Test
+    public void testJoining() {
+        Stream<Person> studentStream = Stream.of(
+                new Person("赵丽颖", 52, 95),
+                new Person("杨颖", 56, 88),
+                new Person("迪丽热巴", 56, 99),
+                new Person("柳岩", 52, 77));
+        //根据字符串拼接：赵丽颖---杨颖---迪丽热巴---柳岩
+        //String collect = studentStream.map(Person::getName).collect(Collectors.joining("---"));
+        String collect = studentStream
+                .map(Person::getName)
+                .collect(Collectors.joining(">_<", "^_^", "^v^"));
+        System.out.println(collect);
+    }
+```
+
+
+
 #### <font color=blue>4）并行数组排序</font>
 
 #### <font color=blue>5）Optional中避免NULL检查</font>
@@ -1155,6 +1303,8 @@ View是一个接口， 它的实现类支持不同的视图类型（jsp，freema
 #### <font color=blue>5）请描述Spring MVC的工作流程？</font>
 
 （请描述Spring MVC的工作原理/描述一下 DispatcherServlet 的工作流程？）
+
+
 
 ![](README.assets/springmvcworkingprinciple.png)
 
