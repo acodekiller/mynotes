@@ -1,4 +1,4 @@
-![logo](https://docsify.js.org/_media/icon.svg)
+![logo](https://raw.githubusercontent.com/acodekiller/mynotes/master/img.jpg)
 
 # A Code Killer
 
