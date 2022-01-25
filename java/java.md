@@ -1,4 +1,22 @@
-# <font color=red>一、基础</font>
+Java总目录：
+
+（1）[JAVA基础](/java/java?id=一、java基础)
+
+（2）[Java集合框架](/java/java?id=二、Java集合框架)
+
+（3）[JUC并发编程](/java/java?id=三、JUC并发编程)
+
+（4）[jvm虚拟机](/java/java?id=四、jvm虚拟机)
+
+（5）[1.8新特性](/java/java?id=五、18新特性)
+
+（6）[反射机制](/java/java?id=六、反射机制)
+
+---
+
+
+
+# <font color=red>一、Java基础</font>
 
 ## <font color=green>1.Java的3种开发方向</font>
 
