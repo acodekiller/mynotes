@@ -731,21 +731,21 @@ HTTP2.0新增加服务器提示，可以先于客户端检测到将要请求的�
 
 #### 1)   对称加密
 
-1.      **概念**
+**概念**
 
 对称加密指的就是加密和解密使用同一个秘钥，所以叫做对称加密。对称加密只有一个秘钥，作为私钥。
 
-2.      **常见算法**
+**常见算法**
 
 DES，AES，3DES等等。
 
 #### 2)   非对称加密
 
-1.      **概念**
+**概念**
 
 非对称加密指的是：加密和解密使用不同的秘钥，一把作为公开的公钥，另一把作为私钥。公钥加密的信息，只有私钥才能解密。私钥加密的信息，只有公钥才能解密。
 
-2. **常见算法**
+**常见算法**
 
 常见的非对称加密算法：RSA，ECC
 
@@ -1088,6 +1088,381 @@ int find(int x)     				//查找结点 x的根结点
 1.[小团的配送团队](https://blog.csdn.net/weixin_44957145/article/details/122649292)
 
 2.[合根植物](https://blog.csdn.net/weixin_44957145/article/details/122650989)
+
+
+
+## <font color=green>3、回溯算法</font>
+
+### <font color=blue>1）组合问题</font>
+
+[力扣题目链接](https://leetcode-cn.com/problems/combinations/)
+
+**问题：**
+
+给定两个整数 n 和 k，返回范围 [1, n] 中所有可能的 k 个数的组合。
+
+你可以按 任何顺序 返回答案。
+
+**示例 1：**
+
+> 输入：n = 4, k = 2
+> 输出：
+> [
+>   [2,4],
+>   [3,4],
+>   [2,3],
+>   [1,2],
+>   [1,3],
+>   [1,4],
+> ]
+
+**示例 2：**
+
+> 输入：n = 1, k = 1
+> 输出：[[1]]
+>
+>
+> 提示：
+>
+> 1 <= n <= 20
+> 1 <= k <= n
+
+**代码：**
+
+```java
+class Solution {
+    private List<List<Integer>> res = new ArrayList();
+    private List<Integer> list = new ArrayList();
+
+    public List<List<Integer>> combine(int n, int k) {
+        dfs(1,n,k);
+        return res;
+    }
+
+    private void dfs(int start,int n,int k){
+        if(list.size() == k){
+            res.add(new ArrayList(list));
+            return;
+        }
+        for(int i = start; i <= n; i++){
+            list.add(i);
+            dfs(i+1,n,k);
+            list.remove(list.get(list.size()-1));
+        }
+    }
+}
+```
+
+回溯法的搜索过程就是一个树型结构的遍历过程，在如下图中，可以看出for循环用来横向遍历，递归的过程是纵向遍历。
+
+![77.组合1](computer.assets/20201123195242899.png)
+
+**剪枝优化：**
+
+我们说过，回溯法虽然是暴力搜索，但也有时候可以有点剪枝优化一下的。
+
+在遍历的过程中有如下代码：
+
+```cpp
+for (int i = startIndex; i <= n; i++) {
+    path.push_back(i);
+    backtracking(n, k, i + 1);
+    path.pop_back();
+}
+```
+
+这个遍历的范围是可以剪枝优化的，怎么优化呢？
+
+来举一个例子，n = 4，k = 4的话，那么第一层for循环的时候，从元素2开始的遍历都没有意义了。 在第二层for循环，从元素3开始的遍历都没有意义了。
+
+这么说有点抽象，如图所示：
+
+![77.组合4](computer.assets/20210130194335207.png)
+
+图中每一个节点（图中为矩形），就代表本层的一个for循环，那么每一层的for循环从第二个数开始遍历的话，都没有意义，都是无效遍历。
+
+**所以，可以剪枝的地方就在递归中每一层的for循环所选择的起始位置**。
+
+**如果for循环选择的起始位置之后的元素个数 已经不足 我们需要的元素个数了，那么就没有必要搜索了**。
+
+优化后的代码：
+
+```java
+class Solution {
+    private List<List<Integer>> res = new ArrayList();
+    private List<Integer> list = new ArrayList();
+
+    public List<List<Integer>> combine(int n, int k) {
+        dfs(1,n,k);
+        return res;
+    }
+
+    private void dfs(int start,int n,int k){
+        if(list.size() == k){
+            res.add(new ArrayList(list));
+            return;
+        }
+        for(int i = start; i <= n - (k-list.size()) + 1; i++){
+            list.add(i);
+            dfs(i+1,n,k);
+            list.remove(list.get(list.size()-1));
+        }
+    }
+}
+```
+
+相关练习：
+
+- [组合总和](https://leetcode-cn.com/problems/combination-sum/)
+
+- [组合总和II](https://leetcode-cn.com/problems/combination-sum-ii/)
+
+- [组合总和III](https://leetcode-cn.com/problems/combination-sum-iii/)
+- [电话号码的字母组合](https://leetcode-cn.com/problems/letter-combinations-of-a-phone-number/)
+
+- [分割回文串](https://leetcode-cn.com/problems/palindrome-partitioning/)
+- [复原IP地址](https://leetcode-cn.com/problems/restore-ip-addresses/)
+
+### <font color=blue>2）子集问题</font>
+
+#### 1.子集
+
+[力扣题目链接](https://leetcode-cn.com/problems/subsets/)
+
+**问题**
+
+给你一个整数数组 `nums` ，数组中的元素 **互不相同** 。返回该数组所有可能的子集（幂集）。
+
+解集 **不能** 包含重复的子集。你可以按 **任意顺序** 返回解集。
+
+**示例 1**
+
+> 输入：nums = [1,2,3]
+> 输出：[[],[1],[2],[1,2],[3],[1,3],[2,3],[1,2,3]]
+
+**示例 2**
+
+> 输入：nums = [0]
+> 输出：[[],[0]]
+
+**提示**
+
+1 <= nums.length <= 10
+-10 <= nums[i] <= 10
+nums 中的所有元素 互不相同
+
+**代码**
+
+```java
+class Solution {
+    private List<List<Integer>> res = new ArrayList();
+    private List<Integer> list = new ArrayList();
+
+    public List<List<Integer>> subsets(int[] nums) {
+        // Arrays.sort(nums);
+        dfs(nums,0);
+        return res;
+    }
+
+    private void dfs(int nums[],int index){
+        res.add(new ArrayList(list));
+        for(int i = index ; i < nums.length; i ++){
+            list.add(nums[i]);
+            dfs(nums,i+1);
+            list.remove(list.size()-1);
+        }
+    }
+}
+```
+
+#### 2.子集II
+
+[力扣题目链接](https://leetcode-cn.com/problems/subsets-ii/)
+
+**题目**
+
+给你一个整数数组 nums ，其中可能包含重复元素，请你返回该数组所有可能的子集（幂集）。
+
+解集 不能 包含重复的子集。返回的解集中，子集可以按 任意顺序 排列。
+
+**示例 1**
+
+> 输入：nums = [1,2,2]
+> 输出：[[],[1],[1,2],[1,2,2],[2],[2,2]]
+
+**示例 2**
+
+> 输入：nums = [0]
+> 输出：[[],[0]]
+
+**提示**
+
+> 1 <= nums.length <= 10
+> -10 <= nums[i] <= 10
+
+**代码**
+
+```java
+class Solution {
+    private List<List<Integer>> res = new ArrayList();
+    private List<Integer> list = new ArrayList();
+    private boolean[] used;
+
+    private void dfs(int[] nums,boolean used[],int index){
+        res.add(new ArrayList(list));
+        if(index == nums.length){
+            return;
+        }
+        for(int i = index; i < nums.length; i ++){
+            if(i > 0 && nums[i] == nums[i-1] && !used[i-1]){
+                continue;
+            }
+            list.add(nums[i]);
+            used[i] = true;
+            dfs(nums,used,i+1);
+            used[i] = false;
+            list.remove(list.size()-1);
+        }
+    }
+
+    public List<List<Integer>> subsetsWithDup(int[] nums) {
+        used = new boolean[nums.length];
+        Arrays.sort(nums);
+        dfs(nums,used,0);
+        return res;
+    }
+}
+```
+
+![90.子集II](computer.assets/20201124195411977.png)
+
+**相关题目**
+
+[递增子序列](https://leetcode-cn.com/problems/increasing-subsequences/)
+
+### <font color=blue>3）全排列</font>
+
+#### 1.全排列
+
+[力扣题目链接](https://leetcode-cn.com/problems/permutations/)
+
+**题目**
+
+给定一个不含重复数字的数组 nums ，返回其 所有可能的全排列 。你可以 按任意顺序 返回答案。
+
+**示例 1**
+
+> 输入：nums = [1,2,3]
+> 输出：[[1,2,3],[1,3,2],[2,1,3],[2,3,1],[3,1,2],[3,2,1]]
+
+**示例 2**
+
+> 输入：nums = [0,1]
+> 输出：[[0,1],[1,0]]
+
+**示例 3**
+
+> 输入：nums = [1]
+> 输出：[[1]]
+
+**代码**
+
+```java
+class Solution {
+    private List<List<Integer>> res = new ArrayList();
+    private List<Integer> list = new LinkedList();
+    private boolean[] used;
+
+    private void dfs(int[] nums,boolean used[]){
+        if(list.size() == nums.length){
+            res.add(new ArrayList(list));
+            return;
+        }
+        for(int i = 0 ; i < nums.length; i ++){
+            if(!used[i]){
+                list.add(nums[i]);
+                used[i] = true;
+                dfs(nums,used);
+                used[i] = false;
+                list.remove(list.size()-1);
+            }
+        }
+    }
+
+    public List<List<Integer>> permute(int[] nums) {
+        int n = nums.length;
+        used = new boolean[n];
+        Arrays.sort(nums);
+        dfs(nums,used);
+        return res;
+    }
+}
+```
+
+![46.全排列](computer.assets/20201209174225145.png)
+
+#### 2.全排列II
+
+[力扣题目链接](https://leetcode-cn.com/problems/permutations-ii/)
+
+**题目**
+
+给定一个可包含重复数字的序列 nums ，按任意顺序 返回所有不重复的全排列。
+
+**示例 1**
+
+> 输入：nums = [1,1,2]
+>
+> 输出：
+> [[1,1,2],
+>  [1,2,1],
+>  [2,1,1]]
+
+**示例 2**
+
+> 输入：nums = [1,2,3]
+> 输出：[[1,2,3],[1,3,2],[2,1,3],[2,3,1],[3,1,2],[3,2,1]]
+
+**提示**
+
+> 1 <= nums.length <= 8
+> -10 <= nums[i] <= 10
+
+**代码**
+
+```java
+class Solution {
+    private List<List<Integer>> res = new ArrayList();
+    private List<Integer> list = new LinkedList();
+    private boolean[] used;
+
+    private void dfs(int[] nums,boolean[] used){
+        if(list.size() == nums.length){
+            res.add(new ArrayList(list));
+            return;
+        }
+        for(int i = 0 ; i < nums.length; i ++){
+            if(i > 0 && nums[i] == nums[i-1] && used[i-1]){
+                continue;
+            }
+            if(!used[i]){
+                list.add(nums[i]);
+                used[i] = true;
+                dfs(nums,used);
+                list.remove(list.size()-1);
+                used[i] = false;
+            }
+        }
+    }
+
+    public List<List<Integer>> permuteUnique(int[] nums) {
+        used = new boolean[nums.length];
+        Arrays.sort(nums);
+        dfs(nums,used);
+        return res;
+    }
+}
+```
 
 
 
