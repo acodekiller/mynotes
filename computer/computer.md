@@ -1464,7 +1464,207 @@ class Solution {
 }
 ```
 
+#### 3.N皇后
 
+[力扣题目链接](https://leetcode-cn.com/problems/n-queens/)
+
+**题目**
+
+n 皇后问题 研究的是如何将 n 个皇后放置在 n×n 的棋盘上，并且使皇后彼此之间不能相互攻击。
+
+给你一个整数 n ，返回所有不同的 n 皇后问题 的解决方案。
+
+每一种解法包含一个不同的 n 皇后问题 的棋子放置方案，该方案中 'Q' 和 '.' 分别代表了皇后和空位。
+
+![img](computer.assets/queens.jpg)
+
+**示例 1**
+
+> 输入：n = 4
+> 输出：[[".Q..","...Q","Q...","..Q."],["..Q.","Q...","...Q",".Q.."]]
+> 解释：如上图所示，4 皇后问题存在两个不同的解法。
+
+**示例 2**
+
+> 输入：n = 1
+> 输出：[["Q"]]
+
+**提示**
+
+> 1 <= n <= 9
+
+**代码**
+
+```java
+class Solution {
+    List<List<String>> res = new ArrayList<>();
+
+    public List<List<String>> solveNQueens(int n) {
+        char[][] chessboard = new char[n][n];
+        for (char[] c : chessboard) {
+            Arrays.fill(c, '.');
+        }
+        backTrack(n, 0, chessboard);
+        return res;
+    }
+
+
+    public void backTrack(int n, int row, char[][] chessboard) {
+        if (row == n) {
+            res.add(Array2List(chessboard));
+            return;
+        }
+
+        for (int col = 0;col < n; ++col) {
+            if (isValid (row, col, n, chessboard)) {
+                chessboard[row][col] = 'Q';
+                backTrack(n, row+1, chessboard);
+                chessboard[row][col] = '.';
+            }
+        }
+
+    }
+
+
+    public List Array2List(char[][] chessboard) {
+        List<String> list = new ArrayList<>();
+
+        for (char[] c : chessboard) {
+            list.add(String.copyValueOf(c));
+        }
+        return list;
+    }
+
+
+    public boolean isValid(int row, int col, int n, char[][] chessboard) {
+        // 检查列
+        for (int i=0; i<row; ++i) { // 相当于剪枝
+            if (chessboard[i][col] == 'Q') {
+                return false;
+            }
+        }
+
+        // 检查45度对角线
+        for (int i=row-1, j=col-1; i>=0 && j>=0; i--, j--) {
+            if (chessboard[i][j] == 'Q') {
+                return false;
+            }
+        }
+
+        // 检查135度对角线
+        for (int i=row-1, j=col+1; i>=0 && j<=n-1; i--, j++) {
+            if (chessboard[i][j] == 'Q') {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+```
+
+![img](computer.assets/20210130182532303.jpg)
+
+
+
+#### 4.数独
+
+**题目**
+
+编写一个程序，通过填充空格来解决数独问题。
+
+数独的解法需 遵循如下规则：
+
+1. 数字 1-9 在每一行只能出现一次。
+2. 数字 1-9 在每一列只能出现一次。
+3. 数字 1-9 在每一个以粗实线分隔的 3x3 宫内只能出现一次。（请参考示例图）
+
+数独部分空格内已填入了数字，空白格用 '.' 表示。
+
+**示例：**
+
+![img](computer.assets/250px-sudoku-by-l2g-20050714svg.png)
+
+**输入**
+
+> board = [["5","3",".",".","7",".",".",".","."],["6",".",".","1","9","5",".",".","."],[".","9","8",".",".",".",".","6","."],["8",".",".",".","6",".",".",".","3"],["4",".",".","8",".","3",".",".","1"],["7",".",".",".","2",".",".",".","6"],[".","6",".",".",".",".","2","8","."],[".",".",".","4","1","9",".",".","5"],[".",".",".",".","8",".",".","7","9"]]
+> 输出：[["5","3","4","6","7","8","9","1","2"],["6","7","2","1","9","5","3","4","8"],["1","9","8","3","4","2","5","6","7"],["8","5","9","7","6","1","4","2","3"],["4","2","6","8","5","3","7","9","1"],["7","1","3","9","2","4","8","5","6"],["9","6","1","5","3","7","2","8","4"],["2","8","7","4","1","9","6","3","5"],["3","4","5","2","8","6","1","7","9"]]
+>
+> 解释：输入的数独如上图所示，唯一有效的解决方案如下所示：
+>
+> ![img](computer.assets/250px-sudoku-by-l2g-20050714_solutionsvg.png)
+
+
+
+**代码**
+
+```java
+class Solution {
+    public void solveSudoku(char[][] board) {
+        solveSudokuHelper(board);
+    }
+
+    private boolean solveSudokuHelper(char[][] board){
+        //「一个for循环遍历棋盘的行，一个for循环遍历棋盘的列，
+        // 一行一列确定下来之后，递归遍历这个位置放9个数字的可能性！」
+        for (int i = 0; i < 9; i++){ // 遍历行
+            for (int j = 0; j < 9; j++){ // 遍历列
+                if (board[i][j] != '.'){ // 跳过原始数字
+                    continue;
+                }
+                for (char k = '1'; k <= '9'; k++){ // (i, j) 这个位置放k是否合适
+                    if (isValidSudoku(i, j, k, board)){
+                        board[i][j] = k;
+                        if (solveSudokuHelper(board)){ // 如果找到合适一组立刻返回
+                            return true;
+                        }
+                        board[i][j] = '.';
+                    }
+                }
+                // 9个数都试完了，都不行，那么就返回false
+                return false;
+                // 因为如果一行一列确定下来了，这里尝试了9个数都不行，说明这个棋盘找不到解决数独问题的解！
+                // 那么会直接返回， 「这也就是为什么没有终止条件也不会永远填不满棋盘而无限递归下去！」
+            }
+        }
+        // 遍历完没有返回false，说明找到了合适棋盘位置了
+        return true;
+    }
+
+    /**
+     * 判断棋盘是否合法有如下三个维度:
+     *     同行是否重复
+     *     同列是否重复
+     *     9宫格里是否重复
+     */
+    private boolean isValidSudoku(int row, int col, char val, char[][] board){
+        // 同行是否重复
+        for (int i = 0; i < 9; i++){
+            if (board[row][i] == val){
+                return false;
+            }
+        }
+        // 同列是否重复
+        for (int j = 0; j < 9; j++){
+            if (board[j][col] == val){
+                return false;
+            }
+        }
+        // 9宫格里是否重复
+        int startRow = (row / 3) * 3;
+        int startCol = (col / 3) * 3;
+        for (int i = startRow; i < startRow + 3; i++){
+            for (int j = startCol; j < startCol + 3; j++){
+                if (board[i][j] == val){
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+}
+```
+
+![37.解数独](computer.assets/2020111720451790.png)
 
 
 

@@ -1375,6 +1375,96 @@ notifyAll()调用后，会将全部线程由等待池移到锁池，然后参与
 - **超时等待(TIMED_WAITING)：**处于这种状态的线程不会被分配CPU执行时间，不过无须无限期等待被其他线程显示地唤醒，在达到一定时间后它们会自动唤醒。
 - **终止(TERMINATED)：**表示该线程已经执行完毕。
 
+### <font color=blue>24、生产者消费者模板</font>
+
+```java
+class Message {
+    private int id;
+    private String message;
+
+    public Message(int id, String message) {
+        this.id = id;
+        this.message = message;
+    }
+
+    @Override
+    public String toString() {
+        return "Message{" +
+                "id=" + id +
+                ", message='" + message + '\'' +
+                '}';
+    }
+}
+
+class MessageQueue {
+
+    private LinkedList<Message> queue = new LinkedList<>();
+    private int capcity;
+
+    public MessageQueue(int capcity) {
+        this.capcity = capcity;
+    }
+
+    public Message take() {
+        synchronized (queue) {
+            while (queue.isEmpty()) {
+                try {
+                    queue.wait();
+                    System.out.println("队列为空，消费者【" + Thread.currentThread().getName() + "】等待……");
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            Message message = queue.removeFirst();
+            System.out.println("消费者【" + Thread.currentThread().getName() + "】消费消息" + message);
+            queue.notifyAll();
+            return message;
+        }
+    }
+
+    public void put(Message message) {
+        synchronized (queue) {
+            while (queue.size() == capcity) {
+                try {
+                    queue.wait();
+                    System.out.println("队列已满，生产者【" + Thread.currentThread().getName() + "】等待……");
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            System.out.println("生产者【" + Thread.currentThread().getName() + "】存放消息" + message);
+            queue.addLast(message);
+            queue.notifyAll();
+        }
+    }
+}
+
+public class Solution {
+
+    public static void main(String[] args) {
+        MessageQueue messageQueue = new MessageQueue(2);
+        for (int i = 0; i < 3; i++) {
+            int id = i;
+            new Thread(() -> {
+                messageQueue.put(new Message(id, "消息" + id));
+            }, "生产者").start();
+        }
+        new Thread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                messageQueue.take();
+            }
+        }, "消费者").start();
+    }
+}
+```
+
+
+
 ## <font color=green>并发关键字</font>
 
 ### <font color=blue>1、Synchronize</font>
@@ -1609,6 +1699,8 @@ public class Solution {
 
 2. **使用Condition**
 
+版本一：
+
 ```java
 class AwaitSignal extends ReentrantLock {
     private int loop;
@@ -1662,6 +1754,63 @@ public class Solution {
 }
 ```
 
+版本二：
+
+```java
+class AwaitSignal {
+    private int flag;
+    private int loop;
+    private ReentrantLock lock = new ReentrantLock();
+
+    public ReentrantLock getLock() {
+        return lock;
+    }
+
+    public AwaitSignal(int loop, int flag) {
+        this.loop = loop;
+        this.flag = flag;
+    }
+
+    public void print(String str, int curFlag, int nextFlag, Condition cur, Condition next) {
+        for (int i = 0; i < loop; i++) {
+            lock.lock();
+            try {
+                while (curFlag != flag) {
+                    cur.await();
+                }
+                System.out.print(str);
+                flag = nextFlag;
+                next.signal();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } finally {
+                lock.unlock();
+            }
+        }
+    }
+}
+
+public class Main {
+
+    public static void main(String[] args) {
+        AwaitSignal awaitSignal = new AwaitSignal(5,1);
+        Condition condition1 = awaitSignal.getLock().newCondition();
+        Condition condition2 = awaitSignal.getLock().newCondition();
+        Condition condition3 = awaitSignal.getLock().newCondition();
+        new Thread(()->{
+            awaitSignal.print("a",1,2,condition1,condition2);
+        }).start();
+        new Thread(()->{
+            awaitSignal.print("b",2,3,condition2,condition3);
+        }).start();
+        new Thread(()->{
+            awaitSignal.print("c",3,1,condition3,condition1);
+        }).start();
+    }
+
+}
+```
+
 
 
 ### <font color=blue>6.  ReentrantLock</font>
@@ -1676,15 +1825,15 @@ ReentrantLock重入锁，是实现Lock接口的一个类，也是在实际编程
 
 （ReentrantReadWriteLock）
 
-#### 1)   为什么要有ReadWriteLock？
+#### 1）为什么要有ReadWriteLock？
 
 ReentrantLock某些时候有局限。如果使用ReentrantLock，可能本身是为了防止线程A在写数据、线程B在读数据造成的数据不一致，但这样，如果线程C在读数据、线程D也在读数据，读数据是不会改变数据的，没有必要加锁，但是还是加锁了，降低了程序的性能。因为这个，才诞生了读写锁ReadWriteLock。
 
-#### 2)   ReadWriteLock是什么？
+#### 2）ReadWriteLock是什么？
 
 ReadWriteLock是一个读写锁接口，读写锁是用来提升并发程序性能的锁分离技术，ReentrantReadWriteLock是ReadWriteLock接口的一个具体实现，实现了读写的分离，读锁是共享的，写锁是独占的，读和读之间不会互斥，读和写、写和读、写和写之间才会互斥，提升了读写的性能。
 
-#### 3)   它的三个重要特性
+#### 3）它的三个重要特性
 
 公平选择性：支持非公平（默认）和公平的锁获取方式，吞吐量还是非公平优于公平。
 
@@ -1708,9 +1857,511 @@ ReadWriteLock是一个读写锁接口，读写锁是用来提升并发程序性�
 >
 > 此种方案适合于读多写少的场景，如果系统并没有要求数据的强一致性的话，我们一般直接采用“**先更新数据库，再删除缓存**”，这种方案虽然也会出现脏数据，但是概率极低，而且redis也有过期时间，能够保证最终一致性。
 
+## <font color=green>原子操作类</font>
+
+### <font color=blue>1.  CAS</font>
+
+#### 1）什么是CAS?
+
+CAS是compare and swap的缩写，即我们所说的比较交换。
+
+cas是一种基于锁的操作，而且是乐观锁。在java中锁分为乐观锁和悲观锁。悲观锁是将资源锁住，等一个之前获得锁的线程释放锁之后，下一个线程才可以访问。而乐观锁采取了一种宽泛的态度，通过某种方式不加锁来处理资源，比如通过给记录加version来获取数据，性能较悲观锁有很大的提高。
+
+CAS操作包含三个操作数——内存位置（V）、预期原值（A）和新值(B)。如果内存地址里面的值和A的值是一样的，那么就将内存里面的值更新成B。CAS是通过无限循环来获取数据的，如果在第一轮循环中，a线程获取地址里面的值被b线程修改了，那么a线程需要自旋，到下次循环才有可能机会执行。
+
+java.util.concurrent.atomic包下的类大多是使用CAS操作来实现的
+
+#### 2）CAS的会产生什么问题？
+
+1. **循环时间长开销大**
+
+对于资源竞争严重（线程冲突严重）的情况，CAS自旋的概率会比较大，从而浪费更多的CPU资源，效率低于synchronized。
+
+2. **只能保证一个共享变量的原子操作**
+
+当对一个共享变量执行操作时，我们可以使用循环CAS的方式来保证原子操作，但是对多个共享变量操作时，循环CAS就无法保证操作的原子性，这个时候就可以用锁。
+
+3. **ABA问题**
+
+比如说一个线程one从内存位置V中取出A，这时候另一个线程two也从内存中取出A，并且two进行了一些操作变成了B，然后two又将V位置的数据变成A，这时候线程one进行CAS操作发现内存中仍然是A，然后one操作成功。尽管线程one的CAS操作成功，但可能存在潜藏的问题。从Java1.5开始JDK的atomic包里提供了一个类AtomicStampedReference来解决ABA问题。
+
+#### 3）如何解决ABA问题
+
+使用版本号或时间戳，如：J.U.C包提供了一个带有时间戳的原子引用类AtomicStampedReference来解决该问题
+
+#### 4）什么是自旋
+
+很多synchronized里面的代码只是一些很简单的代码，执行时间非常快，此时等待的线程都加锁可能是一种不太值得的操作，因为线程阻塞涉及到用户态和内核态切换的问题。既然synchronized里面的代码执行得非常快，不妨让等待锁的线程不要被阻塞，而是在synchronized的边界做忙循环，这就是自旋。如果做了多次循环发现还没有获得锁，再阻塞，这样可能是一种更好的策略。
+
+### <font color=blue>2.  为什么需要AtomicInteger原子操作类</font>
+
+对于Java中的运算操作，例如自增或自减，若没有进行额外的同步操作，在多线程环境下就是线程不安全的。num++解析为num=num+1，明显，这个操作不具备原子性，多线程并发共享这个变量时必然会出现问题。
+
+### <font color=blue>3.  说一下atomic的原理</font>
+
+（1）Atomic包中的类基本的特性就是在多线程环境下，当有多个线程同时对单个（包括基本类型及引用类型）变量进行操作时，具有排他性，即当多个线程同时对该变量的值进行更新时，仅有一个线程能成功，而未成功的线程可以向自旋锁一样，继续尝试，一直等到执行成功。
+
+（2）AtomicInteger类主要利用CAS(compareandswap)+volatile和native方法来保证原子操作，从而避免synchronized的高开销，执行效率大为提升。
+
+（3）CAS的原理是拿期望的值和原本的一个值作比较，如果相同则更新成新的值。UnSafe类的objectFieldOffset()方法是一个本地方法，这个方法是用来拿到“原来的值”的内存地址，返回值是valueOffset。另外value是一个volatile变量，在内存中可见，因此JVM可以保证任何时刻任何线程总能拿到该变量的最新值。
+
+## <font color=green>并发容器</font>
+
+### <font color=blue>1.  ConcurrentHashMap</font>
+
+它是如何实现线程安全的？
+
+jdk1.6
+
+![img](java.assets/006tNbRwly1g9whwt59o9j30c60dw3z0.jpg)
+
+segment继承了ReentrantLock充当锁的角色，为每一个segment提供了线程安全的保障；
+
+segment维护了哈希散列表的若干个桶，每个桶由HashEntry构成的链表。
+
+jdk1.8
+
+ConcurrentHashMap抛弃了原有的Segment分段锁，而采用了CAS+synchronized来保证并发安全性。
+
+### <font color=blue>2.  CopyOnWriteArrayList</font>
+
+#### 1)   CopyOnWriteArrayList是什么？
+
+CopyOnWriteArrayList是一个并发容器。CopyOnWriteArrayList(免锁容器)的好处之一是当多个迭代器同时遍历和修改这个列表时，不会抛出ConcurrentModificationException。在CopyOnWriteArrayList中，写入将导致创建整个底层数组的副本，而源数组将保留在原地，使得复制的数组在被修改时，读取操作可以安全地执行。
+
+#### 2)   设计思想
+
+- 读写分离，读和写分开
+- 最终一致性
+- 使用另外开辟空间的思路，来解决并发冲突
+
+#### 3)   使用场景
+
+读多写少
+
+#### 4)   缺点
+
+- 由于写操作的时候，需要拷贝数组，会消耗内存，如果原数组的内容比较多的情况下，可能导致younggc或者fullgc。
+- 不能用于实时读的场景，像拷贝数组、新增元素都需要时间，所以调用一个set操作后，读取到数据可能还是旧的，虽然CopyOnWriteArrayList能做到最终一致性,但是还是没法满足实时性要求。
+- 由于实际使用中可能没法保证CopyOnWriteArrayList到底要放置多少数据，万一数据稍微有点多，每次add/set都要重新复制数组，这个代价实在太高昂了。在高性能的互联网应用中，这种操作分分钟引起故障。
+
+### <font color=blue>3.  ThreadLocal</font>
+
+#### 1)   什么是ThreadLocal？
+
+ThreadLocal叫做线程变量，意思是ThreadLocal中填充的变量属于当前线程，该变量对其他线程而言是隔离的，也就是说该变量是当前线程独有的变量。ThreadLocal为变量在每个线程中都创建了一个副本，那么每个线程可以访问自己内部的副本变量。
+
+#### 2)   作用
+
+ThreadLocal的作用主要是做数据隔离，填充的数据只属于当前线程，变量的数据对别的线程而言是相对隔离的，在多线程环境下，可以防止自己的变量被其它线程篡改。
+
+#### 3)   ThreadLocal与Synchronized的区别
+
+Synchronized用于线程间的数据共享，而ThreadLocal则用于线程间的数据隔离。
+
+Synchronized是利用锁的机制，使变量或代码块在某一时该只能被一个线程访问。而ThreadLocal为每一个线程都提供了变量的副本，使得每个线程在某一时间访问到的并不是同一个对象，这样就隔离了多个线程对数据的数据共享。而Synchronized却正好相反，它用于在多个线程间通信时能够获得数据共享。
+
+#### 4)   应用场景
+
+##### <font color =#871F78>1.Spring中</font>>
+
+Spring采用Threadlocal的方式，来保证单个线程中的数据库操作使用的是同一个数据库连接（TransactionSynchronizationManager）
+
+##### <font color =#871F78>2.存储用户Session。</font>
+
+```java
+private static final ThreadLocal threadSession = new ThreadLocal();
+ 
+public static Session getSession() throws InfrastructureException {
+    Session s = (Session) threadSession.get();
+    try {
+        if (s == null) {
+            s = getSessionFactory().openSession();
+            threadSession.set(s);
+        }
+    } catch (HibernateException ex) {
+        throw new InfrastructureException(ex);
+    }
+    return s;
+}
+```
+
+##### <font color =#871F78>3.解决日期问题</font>
+
+[使用ThreadLocal解决日期问题](/java/threadLocal)
+
+#### 5）Thread的原理
+
+每个Thread内部都有一个Map即ThreadLocalMap，我们每当定义一个ThreadLocal变量，就相当于往这个Map里面存放了一个key，并定义了一个对应的value。每当使用ThreadLocal，就相当于get(key)，寻找对应的的value。
+
+#### 6)   ThreadLocalMap的底层结构是怎样的
+
+通过观察源码，我们可以发现其中的Entry继承了WeakReference，也没有看到HashMap中的next，所以不存在链表了，因此它是一个数组的形式。
+
+```java
+static class ThreadLocalMap {
+
+        static class Entry extends WeakReference<ThreadLocal<?>> {
+            /** The value associated with this ThreadLocal. */
+            Object value;
+
+            Entry(ThreadLocal<?> k, Object v) {
+                super(k);
+                value = v;
+            }
+        }
+        ……
+    }    
+```
 
 
 
+![img](java.assets/aHR0cHM6Ly90dmExLnNpbmFpbWcuY24vbGFyZ2UvMDA3UzhaSWxseTFnaDRmeTZndncwajMwdzAwOTNqc3UuanBn)
+
+#### 7)   ThreadLocal对象存放在哪？
+
+在Java中，栈内存归属于单个线程，每个线程都会有一个栈内存，其存储的变量只能在其所属线程中可见，即栈内存可以理解成线程的私有内存，而堆内存中的对象对所有线程可见，堆内存中的对象可以被所有线程访问。但ThreadLocal的实例以及其值并不是存放在栈上的。因为ThreadLocal实例实际上也是被其创建的类持有（更顶端应该是被线程持有），而ThreadLocal的值其实也是被线程实例持有，它们都是位于堆上，只是通过一些技巧将可见性修改成了线程可见。
+
+#### 8)   如何共享线程的ThreadLocal数据
+
+使用InheritableThreadLocal可以实现多个线程访问ThreadLocal的值，我们在主线程中创建一个InheritableThreadLocal的实例，然后在子线程中得到这个InheritableThreadLocal实例设置的值。
+
+#### 9)   ThreadLocal内存泄漏问题
+
+##### <font color =#871F78>1.内存泄露的原因</font>
+
+```java
+/**
+ * The entries in this hash map extend WeakReference, using
+ * its main ref field as the key (which is always a
+ * ThreadLocal object).  Note that null keys (i.e. entry.get()
+ * == null) mean that the key is no longer referenced, so the
+ * entry can be expunged from table.  Such entries are referred to
+ * as "stale entries" in the code that follows.
+ */
+static class Entry extends WeakReference<ThreadLocal<?>> {
+    /** The value associated with this ThreadLocal. */
+    Object value;
+
+    Entry(ThreadLocal<?> k, Object v) {
+        super(k);
+        value = v;
+    }
+}
+```
+
+ThreadLocalMap中使用的key为ThreadLocal的弱引用，而value是强引用。所以，如果ThreadLocal没有被外部强引用的情况下，在垃圾回收的时候，key会被清理掉，而value不会被清理掉。这样一来，ThreadLocalMap中就会出现key为null的Entry。假如我们不做任何措施的话，value永远无法被GC回收，这个时候就可能会产生内存泄露。ThreadLocalMap实现中已经考虑了这种情况，在调用set()、get()、remove()方法的时候，会清理掉key为null的记录。使用完ThreadLocal方法后最好手动调用remove()方法。
+
+##### <font color =#871F78>2.解决方案</font>
+
+每次使用完ThreadLocal，都调用它的remove()方法，清除数据。
+
+##### <font color =#871F78>3.为什么ThreadLocalMap的key要设计成弱引用？</font>
+
+不妨反过来想想，如果使用强引用，当ThreadLocal对象（假设为ThreadLocal@123456）的引用（即：TL_INT，是一个强引用，指向ThreadLocal@123456）被回收了，ThreadLocalMap本身依然还持有ThreadLocal@123456的强引用，如果没有手动删除这个key，则ThreadLocal@123456不会被回收，所以只要当前线程不消亡，ThreadLocalMap引用的那些对象就不会被回收，可以认为这导致Entry内存泄漏。
+
+那使用弱引用的好处呢？
+
+如果使用弱引用，那指向ThreadLocal@123456对象的引用就两个：TL_INT强引用，和ThreadLocalMap中Entry的弱引用。一旦TL_INT被回收，则指向ThreadLocal@123456的就只有弱引用了，在下次gc的时候，这个ThreadLocal@123456就会被回收。
+
+那么问题来了，ThreadLocal@123456对象只是作为ThreadLocalMap的一个key而存在的，现在它被回收了，但是它对应的value并没有被回收，内存泄露依然存在！而且key被删了之后，变成了null，value更是无法被访问到了！针对这一问题，ThreadLocalMap类的设计本身已经有了这一问题的解决方案，那就是在每次get()/set()/remove()ThreadLocalMap中的值的时候，会自动清理key为null的value。如此一来，value也能被回收了。
+
+既然对key使用弱引用，能使key自动回收，那为什么不对value使用弱引用？答案显而易见，假设往ThreadLocalMap里存了一个value，gc过后value便消失了，那就无法使用ThreadLocalMap来达到存储全线程变量的效果了。（但是再次访问该key的时候，依然能取到value，此时取得的value是该value的初始值。即在删除之后，如果再次访问，取到null，会重新调用初始化方法。）
+
+## <font color=blue>4.  BlockingQueue</font>
+
+#### 1)   什么是阻塞队列
+
+阻塞队列（BlockingQueue）是一个支持两个附加操作的队列。
+
+这两个附加的操作是：在队列为空时，获取元素的线程会等待队列变为非空。当队列满时，存储元素的线程会等待队列可用。
+
+阻塞队列常用于生产者和消费者的场景，生产者是往队列里添加元素的线程，消费者是从队列里拿元素的线程。阻塞队列就是生产者存放元素的容器，而消费者也只从容器里拿元素。
+
+#### 2)   它有哪些实现类 
+
+- **ArrayBlockingQueue：**由数组结构组成的有界阻塞队列；
+- **LinkedBlockingQueue：**由链表结构组成的有界（但大小默认值为integer.MAX_VALUE）阻塞队列；
+- **DelayQueue：**使用优先级队列实现的延迟无界阻塞队列；
+- **PriorityBlockingQueue：**支持优先级排序的无界阻塞队列；
+- **SynchronousQueue：**一个不存储元素的阻塞队列，也即单个元素的队列；
+- **LinkedTransferQueue：**由链表组成的无界阻塞队列；
+- **LinkedBlockingDeque：**由链表组成的双向阻塞队列；
+
+### 3)   用处
+
+BlockingQueue接口是Queue的子接口，它的主要用途并不是作为容器，而是作为线程同步的的工具，因此他具有一个很明显的特性，当生产者线程试图向BlockingQueue放入元素时，如果队列已满，则线程被阻塞，当消费者线程试图从中取出一个元素时，如果队列为空，则该线程会被阻塞，正是因为它所具有这个特性，所以在程序中多个线程交替向BlockingQueue中放入元素，取出元素，它可以很好的控制线程之间的通信。<>
+
+## <font color = green>线程池</font>
+
+### <font color = blue>1.  什么是线程池？</font>
+
+线程池顾名思义就是事先创建若干个可执行的线程放入一个池（容器）中，需要的时候从池中获取线程不用自行创建，使用完毕不需要销毁线程而是放回池中，从而减少创建和销毁线程对象的开销。
+
+### <font color = blue>2.  主要优点</font>
+
+- 降低资源消耗。通过重复利用已创建的线程降低线程创建和销毁造成的销耗。
+- 提高响应速度。当任务到达时，任务可以不需要等待线程创建就能立即执行。
+- 提高线程的可管理性。线程是稀缺资源，如果无限制的创建，不仅会销耗系统资源，还会降低系统的稳定性，使用线程池可以进行统一的分配，调优和监控。
+
+### <font color = blue>3.  列举常用的线程池</font>
+
+#### 1）newCachedThreadPool
+
+创建一个可缓存线程池，如果线程池长度超过处理需要，可灵活回收空闲线程，若无可回收，则新建线程。
+
+**源码**
+
+```java
+public static ExecutorService newCachedThreadPool(ThreadFactory threadFactory) {
+        return new ThreadPoolExecutor(0, Integer.MAX_VALUE,
+                                      60L, TimeUnit.SECONDS,
+                                      new SynchronousQueue<Runnable>(),
+                                      threadFactory);
+    }
+```
+
+**特点**
+
+核心线程数是0，最大线程数是Integer.MAX_VALUE，救急线程的空闲生存时间是60s，意味着：
+
+- 全部是救急线程（60s后可回收）
+- 救急线程可以无限创建
+- 队列采用了SynchronousQueue实现（无容量，没有线程来取是放不进去的）
+
+**评价**
+
+> 整个线程池表现为线程数量会根据任务不断增长，没有上限，当任务执行完毕，空闲1分钟后释放线程。
+>
+> 适合任务数比较密集，但每个任务执行时间较短的情况。
+
+#### 2）newFixedThreadPool
+
+创建固定大小的线程池。每次提交一个任务就创建一个线程，直到线程达到线程池的最大大小。
+
+**源码**
+
+```java
+public static ExecutorService newFixedThreadPool(int nThreads, ThreadFactory threadFactory) {
+    return new ThreadPoolExecutor(nThreads, nThreads,
+                                  0L, TimeUnit.MILLISECONDS,
+                                  new LinkedBlockingQueue<Runnable>(),
+                                  threadFactory);
+}
+```
+
+**特点**
+
+- 核心线程数=最大线程数（没有救急线程被创建），因此也无需超时等待时间。
+- 阻塞队列是无界队列，可放任意数量的任务。
+
+**评价**
+
+> 适用于任务量已知，相对耗时的任务。
+
+#### 3）newSingleThreadExecutor
+
+创建一个单线程的线程池。
+
+**源码**
+
+```java
+public static ExecutorService newSingleThreadExecutor() {
+        return new FinalizableDelegatedExecutorService
+            (new ThreadPoolExecutor(1, 1,
+                                    0L, TimeUnit.MILLISECONDS,
+                                    new LinkedBlockingQueue<Runnable>()));
+    }
+```
+
+**使用场景**
+
+希望多个任务排队执行。线程数固定为1，任务多于1时，会放入无界队列排队。任务执行完毕，这唯一的线程也不会释放。
+
+**区别**
+
+- 自己创建一个单线程串行执行任务，如果执行失败而终止没有任何的补救措施，而线程池还会新建一个线程，保证池的正常工作。
+
+- Executors.newSingleThreadExecutor()线程数始终为1，不能修改。
+
+  FinalizableDelegatedExecutorService应用的是装饰者模式，只对外暴露了ExecutorService接口，因此不能调用ThreadPoolExecutor中特有的方法；
+
+- Executors.newFixedThreadPool(1)初始为1，以后可以修改
+
+  对外暴露的是ThreadPoolExecutor对象，可以强转后调用setCorePoolSize()等方法进行修改。
+
+#### 4）newScheduleThreadPool
+
+创建一个大小无限的线程池。此线程池支持定时以及周期性执行任务的需求。
+
+#### 5）newWorkStealingPool
+
+jdk1.8提供的线程池，底层使用的是ForkJoinPool实现，创建一个拥有多个任务队列的线程池，可以减少连接数，创建当前可用cpu核数的线程来并行执行任务。
+
+### <font color = blue>4.  线程池有哪几种状态</font>
+
+- **RUNNING**：这是最正常的状态，接受新的任务，处理等待队列中的任务。
+- **SHUTDOWN**：不接受新的任务提交，但是会继续处理等待队列中的任务。
+- **STOP**：不接受新的任务提交，不再处理等待队列中的任务，中断正在执行任务的线程。
+- **TIDYING**：所有的任务都销毁了，workCount为0，线程池的状态在转换为TIDYING状态时，会执行钩子方法terminated()。
+- **TERMINATED**：terminated()方法结束后，线程池的状态就会变成这个。
+
+### <font color = blue>5.  Executor和Executors的区别？</font>
+
+Executors工具类的不同方法按照我们的需求创建了不同的线程池，来满足业务的需求。
+
+Executor接口对象能执行我们的线程任务。
+
+### <font color = blue>6.  线程池中submit()和execute()方法有什么区别？</font>
+
+**接收参数。**execute()只能执行Runnable类型的任务。submit()可以执行Runnable和Callable类型的任务。
+
+**返回值。**submit()方法可以返回持有计算结果的Future对象，而execute()没有。
+
+**异常处理。**submit()方便Exception处理。
+
+### <font color = blue>7.  线程池为什么要使用阻塞队列而不使用非阻塞队列？</font>
+
+阻塞队列可以保证任务队列中没有任务时阻塞获取任务的线程，使得线程进入wait状态，释放cpu资源。当队列中有任务时才唤醒对应线程从队列中取出消息进行执行。使得在线程不至于一直占用cpu资源。不用阻塞队列也是可以的，不过实现起来比较麻烦而已。
+
+### <font color = blue>8.  自定义线程池</font>
+
+#### 1)   为什么要自定义线程池
+
+阿里巴巴规范规定不允许使用Executors去创建，而是通过ThreadPoolExecutor的方式，这样的处理方式让写的同学更加明确线程池的运行规则，规避资源耗尽的风险。
+
+  newFixedThreadPool和newSingleThreadExecutor：  主要问题是堆积的请求处理队列可能会耗费非常大的内存，甚至OOM。  newCachedThreadPool和newScheduledThreadPool：  主要问题是线程数最大数是Integer.MAX_VALUE，可能会创建数量非常多的线程，甚至OOM。  
+
+#### 2)   ThreadPoolExecutor中的参数
+
+- **corePoolSize：**核心线程数，线程数定义了最小可以同时运行的线程数量。
+- **maximumPoolSize：**线程池中允许存在的工作线程的最大数量
+- **keepAliveTime：**线程池中的线程数量大于corePoolSize的时候，如果这时没有新的任务提交，核心线程外的线程不会立即销毁，而是会等待，直到等待的时间超过了keepAliveTime才会被回收销毁
+- **unit**：keepAliveTime参数的时间单位
+- **workQueue**：当新任务来的时候会先判断当前运行的线程数量是否达到核心线程数，如果达到的话，任务就会被存放在队列中
+- **threadFactory**：为线程池提供创建新线程的线程工厂
+- **handler**：表示当workQueue已满，且池中的线程数达到maximumPoolSize时，线程池拒绝添加新任务时采取的策略。
+
+#### 3)   ThreadPoolExecutor拒绝（饱和）策略
+
+**ThreadPoolExecutor**.**AbortPolicy**()：
+
+丢弃任务，并抛出拒绝执行RejectedExecutionException异常信息。
+
+默认的拒绝策略。最科学的的还是AbortPolicy提供的处理方式：抛出异常，由开发人员进行处理。
+
+**ThreadPoolExecutor**.**CallerRunsPolicy**()：
+
+由向线程池提交任务的线程来执行该任务
+
+可能造成的问题：在非线程池以外直接调用任务的run方法，可能会造成线程安全上的问题
+
+**ThreadPoolExecutor.DiscardPolicy()：**
+
+直接抛弃当前的任务，什么也不做
+
+可能造成的问题：默默的忽略掉被拒绝任务，也没有输出日志或者提示，开发人员不会知道线程池的处理过程出现了错误
+
+**ThreadPoolExecutor**.**DiscardOldestPolicy**()：
+
+丢弃阻塞队列workQueue中最老的一个任务，并将新任务加入。
+
+## <font color = blue>9.  如果你提交任务时，线程池队列已满，这时会发生什么</font>
+
+（1）如果使用的是无界队列LinkedBlockingQueue，也就是无界队列的话，没关系，继续添加任务到阻塞队列中等待执行，因为LinkedBlockingQueue可以近乎认为是一个无穷大的队列，可以无限存放任务
+
+（2）如果使用的是有界队列比如ArrayBlockingQueue，任务首先会被添加到ArrayBlockingQueue中，ArrayBlockingQueue满了，会根据maximumPoolSize的值增加线程数量，如果增加了线程数量还是处理不过来，ArrayBlockingQueue继续满，那么则会使用拒绝策略RejectedExecutionHandler处理满了的任务，默认是AbortPolicy。
+
+## <font color = blue>10. 创建多少线程合适？</font>
+
+- 过少会导致程序不能充分地利用系统资源、容易导致饥饿；
+- 过多会导致更多的线程上下文切换，占用更多内存。
+
+> CPU密集型运算：
+>
+> 通常采用"CPU核数+1"能够实现最优的CPU利用率，+1是保证当线程由于页缺失故障（操作系统）或其它原因导致暂停，额外的这个线程就能顶上去，保证CPU时钟周期不被浪费。
+>
+> I/O密集型运算：
+>
+> CPU不总是处于繁忙状态，例如：当你执行业务计算时，这时候会使用CPU资源，但当你执行IO操作时、远程调用RPC时，包括进行数据库操作时，这时候CPU就闲下来了，你可以利用多线程提高它的利用率。
+>
+> l 经验公式如下：
+>
+> 线程数=核数*期望CPU利用率*总时间(CPU计算时间+等待时间)/CPU计算时间
+>
+> 例如：4核CPU计算时间是50%，其它等待时间是50%，期望CPU被100%利用，套用公式：4*100%*100%/50%=8
+>
+> 例如：4核CPU计算时间是10%，其它等待时间是90%，期望CPU被100%利用，套用公式：4*100%*100%/10%=40
+
+## <font color = green>并发工具</font>
+
+### <font color = blue>1.  CountDownLatch（倒计时器）</font>
+
+CountDownLatch是一个同步工具类，用来协调多个线程之间的同步。这个工具通常用来控制线程等待，它可以让某一个线程等待直到倒计时结束，再开始执行。
+
+### <font color = blue>2.  CyclicBarrier（循环栅栏）</font>
+
+主要应用场景和CountDownLatch类似。CyclicBarrier的字面意思是可循环使用（Cyclic）的屏障（Barrier）。它要做的事情是，让一组线程到达一个屏障（也可以叫同步点）时被阻塞，直到最后一个线程到达屏障时，屏障才会开门，所有被屏障拦截的线程才会继续干活。比如说：多人网络游戏要等到所有人都加入后再开始。
+
+### <font color = blue>3.  Semaphore（信号量）</font>
+
+synchronized和ReentrantLock都是一次只允许一个线程访问某个资源，Semaphore(信号量)可以指定多个线程同时访问某个资源。
+
+### <font color = blue>4.  CountDownLatch和CyclicBarrier的区别</font>
+
+CountDownLatch与CyclicBarrier都是用于控制并发的工具类，都可以理解成维护的就是一个计数器，但是这两者还是各有不同侧重点的：
+
+（1）CountDownLatch一般用于某个线程A等待若干个其他线程执行完任务之后，它才执行；而CyclicBarrier一般用于一组线程互相等待至某个状态，然后这一组线程再同时执行；CountDownLatch强调一个线程等多个线程完成某件事情。CyclicBarrier是多个线程互等，等大家都完成，再携手共进。
+
+（2）调用CountDownLatch的countDown方法后，当前线程并不会阻塞，会继续往下执行；而调用CyclicBarrier的await方法，会阻塞当前线程，直到CyclicBarrier指定的线程全部都到达了指定点的时候，才能继续往下执行；
+
+（3）CountDownLatch方法比较少，操作比较简单，而CyclicBarrier提供的方法更多，比如能够通过getNumberWaiting()，isBroken()这些方法获取当前多个线程的状态，并且CyclicBarrier的构造方法可以传入barrierAction，指定当所有线程都到达时执行的业务功能；
+
+（4）CountDownLatch是不能复用的，而CyclicBarrier是可以复用的。
+
+## <font color = green>Java中的锁</font>
+
+### <font color = blue>1.  偏向锁</font>
+
+含义
+
+Java偏向锁是Java6引入的一项多线程优化。
+
+偏向锁，顾名思义，它会偏向于第一个访问锁的线程，如果在运行过程中，同步锁只有一个线程访问，不存在多线程争用的情况，则线程是不需要触发同步的，这种情况下，就会给线程加一个偏向锁。
+
+如果在运行过程中，遇到了其他线程抢占锁，则持有偏向锁的线程会被挂起，JVM会消除它身上的偏向锁，将锁恢复到标准的轻量级锁。
+
+适用场景
+
+始终只有一个线程在执行同步块，在它没有执行完释放锁之前，没有其它线程去执行同步块，在锁无竞争的情况下使用，一旦有了竞争就升级为轻量级锁，升级为轻量级锁的时候需要撤销偏向锁，撤销偏向锁的时候会导致stoptheword操作；在有锁的竞争时，偏向锁会多做很多额外操作，尤其是撤销偏向所的时候会导致进入安全点，安全点会导致stw，导致性能下降，这种情况下应当禁用。
+
+### <font color = blue>2.  轻量级锁</font>
+
+含义
+
+轻量级锁是由偏向所升级来的，偏向锁运行在一个线程进入同步块的情况下，当第二个线程加入锁争用的时候，偏向锁就会升级为轻量级锁；
+
+### <font color = blue>3.  自旋锁</font>
+
+含义
+
+自旋锁原理非常简单，如果持有锁的线程能在很短时间内释放锁资源，那么那些等待竞争锁的线程就不需要做内核态和用户态之间的切换进入阻塞挂起状态，它们只需要等一等（自旋），等持有锁的线程释放锁后即可立即获取锁，这样就避免用户线程和内核的切换的消耗。但是线程自旋会消耗CPU，如果一直获取不到锁，不能让线程一直占用CPU自旋做无用功，所以需要设定一个自旋等待的最大时间。如果持有锁的线程执行的时间超过自旋等待的最大时间仍没有释放锁，就会导致其它争用锁的线程在最大等待时间内还是获取不到锁，这时争用线程会停止自旋进入阻塞状态。
+
+优缺点
+
+1、自旋锁尽可能的减少线程的阻塞，这对于锁的竞争不激烈，且占用锁时间非常短的代码块来说性能能大幅度的提升，因为自旋的消耗会小于线程阻塞挂起再唤醒的操作的消耗，这些操作会导致线程发生两次上下文切换！
+
+2、但是如果锁的竞争激烈，或者持有锁的线程需要长时间占用锁执行同步块，这时候就不适合使用自旋锁了，因为自旋锁在获取锁前一直都是占用cpu做无用功，同时有大量线程在竞争一个锁，会导致获取锁的时间很长，线程自旋的消耗大于线程阻塞挂起操作的消耗，其它需要cpu的线程又不能获取到cpu，造成cpu的浪费。所以这种情况下我们要关闭自旋锁。
+
+自旋锁时间阈值
+
+### <font color = blue>4.  重量级锁Synchronize</font>
+
+作用与方法时锁的是实例；
+
+作用与静态方法时，锁住的是Class实例，又因为Class相关的数据存储在永久代PermGen（1.8则是元空间），永久代是全局共享的，因此静态方法锁相当于类的一个全局锁，会锁住调用该方法的线程。
+
+synchronized作用于一个对象实例时，锁住的是所有以该对象为锁的代码块。
 
 ---
 
