@@ -340,7 +340,7 @@ public boolean equals(Object obj) {
 >
 > 当你使用Object类作为map的key时，如果你不从写hashcode方法，那么他会继承父类，对整个类进行hashcode计算，如果碰到两个对象中的属性都是一样的，实际生活场景我们希望比较的是它的内容是否相同，而不是它存储的地址是否相同，并且两个不同对象的地址也不可能相同，而要比较他们是否相同，得先让他们放到同一个map中的bucket位置。重写hashcode方法后，如果我们不重写它的equals方法，那么当发生两个相同对象（指的是属性相同，但是两个不同对象）hash碰撞时（此时两个对象的hashcode相同），当使用equals方法判断时，还是会去比较两个key的地址是否相同，如果不重写equals方法，map将以链表（或二叉树）的形式将这两个对象存储在一个bucker的位置。
 
-
+[笔试题：重写了hashcode方法和equals方法，竟然能存放两个相同的对象！！！](/java/exercise?id=_1）hashcode-ampamp-equals)
 
 ## <font color=green>18、为什么HashMap中String、Integer这样的包装类适合作为Key</font>
 
@@ -1601,11 +1601,11 @@ Lock可以让等待锁的线程响应中断(lockInterruptibly），而synchroniz
 
 整体上来说Lock是synchronized的扩展版，Lock提供了无条件的、可轮询的(tryLock方法)、定时的(tryLock带参方法)、可中断的(lockInterruptibly)、可多条件队列的(newCondition方法)锁操作。
 
-### <font color=blue>4.  AQS(AbstractQueuedSynchronizer)</font>
+### <font color=blue>4.  AQS</font>
 
 #### 1) AQS是什么
 
-AQS的全程是AbstractQueuedSynchronizer即抽象队列同步器，*AQS就是一个并发包的基础组件，用来实现各种锁，各种同步组件的。*它包含了state变量、加锁线程、等待队列等并发中的核心组件，用来维护加锁状态，像ReentrantLock这种东西只是一个外层的API，内核中的锁机制实现都是依赖AQS来实现的。
+AQS的全称是AbstractQueuedSynchronizer即抽象队列同步器，AQS就是一个并发包的基础组件，用来实现各种锁，各种同步组件的。它包含了state变量、加锁线程、等待队列等并发中的核心组件，用来维护加锁状态，像ReentrantLock这种东西只是一个外层的API，内核中的锁机制实现都是依赖AQS来实现的。
 
 #### 2) 它的内部结构
 
@@ -2068,7 +2068,7 @@ ThreadLocalMap中使用的key为ThreadLocal的弱引用，而value是强引用�
 
 既然对key使用弱引用，能使key自动回收，那为什么不对value使用弱引用？答案显而易见，假设往ThreadLocalMap里存了一个value，gc过后value便消失了，那就无法使用ThreadLocalMap来达到存储全线程变量的效果了。（但是再次访问该key的时候，依然能取到value，此时取得的value是该value的初始值。即在删除之后，如果再次访问，取到null，会重新调用初始化方法。）
 
-## <font color=blue>4.  BlockingQueue</font>
+### <font color=blue>4.  BlockingQueue</font>
 
 #### 1)   什么是阻塞队列
 
@@ -2088,7 +2088,7 @@ ThreadLocalMap中使用的key为ThreadLocal的弱引用，而value是强引用�
 - **LinkedTransferQueue：**由链表组成的无界阻塞队列；
 - **LinkedBlockingDeque：**由链表组成的双向阻塞队列；
 
-### 3)   用处
+#### 3)   用处
 
 BlockingQueue接口是Queue的子接口，它的主要用途并不是作为容器，而是作为线程同步的的工具，因此他具有一个很明显的特性，当生产者线程试图向BlockingQueue放入元素时，如果队列已满，则线程被阻塞，当消费者线程试图从中取出一个元素时，如果队列为空，则该线程会被阻塞，正是因为它所具有这个特性，所以在程序中多个线程交替向BlockingQueue中放入元素，取出元素，它可以很好的控制线程之间的通信。<>
 
@@ -2266,13 +2266,13 @@ Executor接口对象能执行我们的线程任务。
 
 丢弃阻塞队列workQueue中最老的一个任务，并将新任务加入。
 
-## <font color = blue>9.  如果你提交任务时，线程池队列已满，这时会发生什么</font>
+### <font color = blue>9.  如果你提交任务时，线程池队列已满，这时会发生什么</font>
 
 （1）如果使用的是无界队列LinkedBlockingQueue，也就是无界队列的话，没关系，继续添加任务到阻塞队列中等待执行，因为LinkedBlockingQueue可以近乎认为是一个无穷大的队列，可以无限存放任务
 
 （2）如果使用的是有界队列比如ArrayBlockingQueue，任务首先会被添加到ArrayBlockingQueue中，ArrayBlockingQueue满了，会根据maximumPoolSize的值增加线程数量，如果增加了线程数量还是处理不过来，ArrayBlockingQueue继续满，那么则会使用拒绝策略RejectedExecutionHandler处理满了的任务，默认是AbortPolicy。
 
-## <font color = blue>10. 创建多少线程合适？</font>
+### <font color = blue>10. 创建多少线程合适？</font>
 
 - 过少会导致程序不能充分地利用系统资源、容易导致饥饿；
 - 过多会导致更多的线程上下文切换，占用更多内存。
@@ -2293,19 +2293,156 @@ Executor接口对象能执行我们的线程任务。
 >
 > 例如：4核CPU计算时间是10%，其它等待时间是90%，期望CPU被100%利用，套用公式：4*100%*100%/10%=40
 
+### <font color = blue>11.提交任务</font>
+
+![image-20220204180139426](java.assets/image-20220204180139426.png)
+
+### <font color = blue>12.tomcat线程池</font>
+
+#### 1）Tomcat在哪里使用到线程池？
+
+> Tomcat的组成：
+>
+> > 
+>
+> ![img](java.assets/728328-20190419193044667-1207946766.png)
+>
+> - Server：表示一个Tomcat实例 (单例的)；Server代表整个catalina servlet容器；包含一个或多个service子容器。主要是用来管理容器下各个Serivce组件的生命周期。
+> - Service：代表Tomcat中一组提供服务、处理请求的组件。是一个分组结构，包括多个Connector和一个Container。
+
+![image-20220205113741267](java.assets/image-20220205113741267.png)
+
+- LimitLatch用来限流，可以控制最大连接个数，类似J.U.C中的Semaphore；
+- Acceptor只负责【接受新的socket连接】
+- Poller只负责监听socket channel是否有【可读的I/O事件】
+- 一旦可读，封装一个任务对象（socketProcessor），提交给Executor线程池处理。
+- Executor线程池中的工作线程负责最终职责【处理请求】
+
+#### 2）不同之处
+
+Tomcat线程池扩展了ThreadPoolExecutor，行为稍有不同
+
+如果总线程数达到maximumPoolSize。这时不会立即抛出RejectedExecutionExecption异常，而是再次尝试将任务放入队列中，如果还是失败，才抛出异常。
+
+![image-20220205115223067](java.assets/image-20220205115223067.png)
+
 ## <font color = green>并发工具</font>
 
 ### <font color = blue>1.  CountDownLatch（倒计时器）</font>
 
 CountDownLatch是一个同步工具类，用来协调多个线程之间的同步。这个工具通常用来控制线程等待，它可以让某一个线程等待直到倒计时结束，再开始执行。
 
+案例
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        CountDownLatch latch = new CountDownLatch(3);
+        new Thread(()->{
+            try {
+                Thread.sleep(2000);
+                latch.countDown();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        },"线程一").start();
+        new Thread(()->{
+            try {
+                Thread.sleep(1000);
+                latch.countDown();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        },"线程二").start();
+        new Thread(()->{
+            try {
+                Thread.sleep(1500);
+                latch.countDown();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        },"线程三").start();
+        new Thread(()->{
+            try {
+                latch.await();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            System.out.println("其它线程已经执行完毕……");
+        },"汇总线程").start();
+
+    }
+}
+```
+
+
+
 ### <font color = blue>2.  CyclicBarrier（循环栅栏）</font>
 
 主要应用场景和CountDownLatch类似。CyclicBarrier的字面意思是可循环使用（Cyclic）的屏障（Barrier）。它要做的事情是，让一组线程到达一个屏障（也可以叫同步点）时被阻塞，直到最后一个线程到达屏障时，屏障才会开门，所有被屏障拦截的线程才会继续干活。比如说：多人网络游戏要等到所有人都加入后再开始。
 
+案例：
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        CyclicBarrier cyclicBarrier = new CyclicBarrier(2);
+        new Thread(() -> {
+            try {
+                Thread.sleep(1500);
+                cyclicBarrier.await();
+                System.out.println("t1 FINISH");
+            } catch (InterruptedException | BrokenBarrierException e) {
+                e.printStackTrace();
+            }
+        }, "t1").start();
+        new Thread(() -> {
+            try {
+                Thread.sleep(1000);
+                cyclicBarrier.await();
+                System.out.println("t2 FINISH");
+            } catch (InterruptedException | BrokenBarrierException e) {
+                e.printStackTrace();
+            }
+        }, "t2").start();
+    }
+}
+```
+
+
+
 ### <font color = blue>3.  Semaphore（信号量）</font>
 
-synchronized和ReentrantLock都是一次只允许一个线程访问某个资源，Semaphore(信号量)可以指定多个线程同时访问某个资源。
+synchronized和ReentrantLock都是一次只允许一个线程访问某个资源，Semaphore(信号量)可以指定多个线程同时访问某个资源。（类似与停车位。）
+
+案例：
+
+```java
+public class Main {
+    public static void main(String[] args) {
+        Semaphore semaphore = new Semaphore(3);
+        for (int i = 0; i < 10; i++) {
+            new Thread(() -> {
+                try {
+                    semaphore.acquire();
+                    System.out.println("我是线程" + Thread.currentThread().getName());
+                    try{
+                        Thread.sleep(2000);
+                    }catch (InterruptedException e){
+                        e.printStackTrace();
+                    }
+                } catch (InterruptedException e){
+                    e.printStackTrace();
+                }finally {
+                    semaphore.release();
+                }
+            }).start();
+        }
+    }
+}
+```
+
+
 
 ### <font color = blue>4.  CountDownLatch和CyclicBarrier的区别</font>
 
@@ -2317,7 +2454,7 @@ CountDownLatch与CyclicBarrier都是用于控制并发的工具类，都可以�
 
 （3）CountDownLatch方法比较少，操作比较简单，而CyclicBarrier提供的方法更多，比如能够通过getNumberWaiting()，isBroken()这些方法获取当前多个线程的状态，并且CyclicBarrier的构造方法可以传入barrierAction，指定当所有线程都到达时执行的业务功能；
 
-（4）CountDownLatch是不能复用的，而CyclicBarrier是可以复用的。
+（4）CountDownLatch是不能复用的，而CyclicBarrier是可以复用的。CountDownLatch减为0后会重新变为初始设置的值，而CyclicBarrier减为0后一直为0。
 
 ## <font color = green>Java中的锁</font>
 
