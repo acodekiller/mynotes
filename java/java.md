@@ -300,7 +300,7 @@ Java 的泛型是伪泛型，这是因为 Java 在运行期间，所有的泛型
 - 用于构建集合工具类。参考 `Collections` 中的 `sort`, `binarySearch` 方法
 - ......
 
-
+[泛型知识点大全](/java/genericity)
 
 ## <font color=green>16、== 和 equals() 的区别</font>
 
@@ -1459,6 +1459,87 @@ public class Solution {
                 messageQueue.take();
             }
         }, "消费者").start();
+    }
+}
+```
+
+
+
+### <font color=blue>25、什么是线程中断</font>
+
+线程中断即线程运行过程中被其他线程给打断了，它与 stop 最大的区别是：stop 是由系统强制终止线程，而线程中断则是给目标线程发送一个中断信号，如果目标线程没有接收线程中断的信号并结束线程，线程则不会终止，具体是否退出或者执行其他逻辑取决于目标线程。
+
+线程中断三个重要的方法：
+
+| 方法                             | 作用                                                         |
+| -------------------------------- | ------------------------------------------------------------ |
+| java.lang.Thread#interrupt()     | 调用目标线程的interrupt()方法，给目标线程发一个中断信号，线程被打上中断标记。 |
+| java.lang.Thread#isInterrupted() | 判断目标线程是否被中断，不会清除中断标记。                   |
+| java.lang.Thread#interrupted()   | 判断目标线程是否被中断，会清除中断标记。                     |
+
+示例：
+
+```java
+private static void test2() {
+    Thread thread = new Thread(() -> {
+        while (true) {
+            Thread.yield();
+
+            // 响应中断
+            if (Thread.currentThread().isInterrupted()) {
+                System.out.println("Java技术栈线程被中断，程序退出。");
+                return;
+            }
+        }
+    });
+    thread.start();
+    thread.interrupt();
+}
+```
+
+
+
+### <font color=blue>26、什么是线程死锁？</font>
+
+多个线程同时被阻塞，它们中的一个或者全部都在等待某个资源被释放。由于线程被无限期地阻塞，因此程序不可能正常终止。它的四个必要条件：互斥、不可剥夺、请求并等待、循环等待。
+
+下面通过例子说明线程死锁，代码来自并发编程之美。
+
+```java
+public class DeadLockDemo {
+    private static Object resource1 = new Object();//资源 1
+    private static Object resource2 = new Object();//资源 2
+
+    public static void main(String[] args) {
+        new Thread(() -> {
+            synchronized (resource1) {
+                System.out.println(Thread.currentThread() + "get resource1");
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                System.out.println(Thread.currentThread() + "waiting get resource2");
+                synchronized (resource2) {
+                    System.out.println(Thread.currentThread() + "get resource2");
+                }
+            }
+        }, "线程 1").start();
+
+        new Thread(() -> {
+            synchronized (resource2) {
+                System.out.println(Thread.currentThread() + "get resource2");
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                System.out.println(Thread.currentThread() + "waiting get resource1");
+                synchronized (resource1) {
+                    System.out.println(Thread.currentThread() + "get resource1");
+                }
+            }
+        }, "线程 2").start();
     }
 }
 ```
