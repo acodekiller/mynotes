@@ -155,7 +155,7 @@ sudo systemctl restart docker
 
 ### 1）容器的基本操作
 
-##### a.启动一次操作容器
+#### a.启动一次操作容器
 
 ```shelll
 docker run IMAGE_NAME [COMMAND] [ARG…]
@@ -163,7 +163,7 @@ docker run IMAGE_NAME [COMMAND] [ARG…]
 
 
 
-##### b.启动交互式容器
+#### b.启动交互式容器
 
 ```shell
 docker run -it –name=自定义名称 IMAGE_NAME /bin/bash
@@ -184,7 +184,7 @@ docker run -it –name=自定义名称 IMAGE_NAME /bin/bash
 
 
 
-##### c.**查看容器**
+#### c.**查看容器**
 
 ```shell
 #列出正在运行的容器
@@ -201,7 +201,7 @@ docker ps [-a] [-l]
 
 
 
-##### d.查看指定容器
+#### d.查看指定容器
 
 ```shell
 docker inspect name | id
@@ -213,7 +213,7 @@ docker inspect name | id
 
 
 
-##### e.重新启动停止的容器
+#### e.重新启动停止的容器
 
 ```shell
 docker start [-i] 容器名
@@ -227,7 +227,7 @@ docker kill 容器id	#强制停止当前容器
 
 
 
-##### g.删除停止的容器
+#### g.删除停止的容器
 
 ```shell
 docker rm name | id
@@ -248,13 +248,13 @@ docker rm -f $(docker ps -aq)
 
 
 
-##### a.**以守护形式运行容器**
+#### a.**以守护形式运行容器**
 
 我们执行完需要的操作退出容器时，不要使用*exit*退出，可以利用*Ctrl+P+Q*代替，以守护式形式推出容器。
 
 
 
-##### b.附加到运行中的容器
+#### b.附加到运行中的容器
 
 ```shell
 docker attach name | id
@@ -262,7 +262,7 @@ docker attach name | id
 
 
 
-##### c.启动守护式容器（后台运行）
+#### c.启动守护式容器（后台运行）
 
 ```shell
 docker run -d IMAGE_NAME
@@ -270,7 +270,7 @@ docker run -d IMAGE_NAME
 
 
 
-##### d.查看容器日志
+#### d.查看容器日志
 
 ```shell
 docker logs [-f] [-t] [–tail] IMAGE_NAME
@@ -282,7 +282,7 @@ docker logs [-f] [-t] [–tail] IMAGE_NAME
 
 
 
-##### e.查看容器内进程
+#### e.查看容器内进程
 
 ```shell
 docker top IMAGE_NAME
@@ -290,7 +290,7 @@ docker top IMAGE_NAME
 
 
 
-##### f.运行中容器启动新进程
+#### f.运行中容器启动新进程
 
 ```shell
 docker exec [-d] [-i] [-t] IMAGE_NAME [COMMAND] [ARG…]
@@ -300,7 +300,7 @@ docker exec [-d] [-i] [-t] IMAGE_NAME [COMMAND] [ARG…]
 
 
 
-##### g.停止守护式容器
+#### g.停止守护式容器
 
 ```shell
 #发送信号停止容器
@@ -312,7 +312,7 @@ docker kill 容器名
 
 ### 3）镜像操作
 
-##### a.列出镜像
+#### a.列出镜像
 
 ```shell
 docker images [OPTIONS] [REPOSITORY]
@@ -328,7 +328,7 @@ docker images [OPTIONS] [REPOSITORY]
 
 
 
-##### b.查看镜像
+#### b.查看镜像
 
 ```she
 docker inspect [OPTIONS] CONTAINER|IMAGE [CONTAINER|IMAGE]
@@ -336,7 +336,7 @@ docker inspect [OPTIONS] CONTAINER|IMAGE [CONTAINER|IMAGE]
 
 
 
-##### c.删除镜像
+#### c.删除镜像
 
 ```shell
 docker rmi [OPTIONS] IMAGE [IMAGE]
@@ -348,7 +348,7 @@ docker rmi [OPTIONS] IMAGE [IMAGE]
 
 
 
-##### d.查找镜像
+#### d.查找镜像
 
 ```shell
 docker search [OPTIONS] TEAM
@@ -387,7 +387,7 @@ docker commit [OPTIONS] CONTAINER [REPOSITORY[:TAG]]
 
 （这里使用阿里云容器镜像服务演示）
 
-##### (1)进入阿里云容器镜像服务
+##### （1）进入阿里云容器镜像服务
 
 ![image-20210330142907458](imgs/image-20210330142907458.png)
 
