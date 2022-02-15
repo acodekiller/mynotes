@@ -109,3 +109,107 @@ ConfigAttribute，用来保存授权时的角色信息。
 
 ## 3、实现原理
 
+[官网文档](https://docs.spring.io/spring-security/site/docs/5.5.4/reference/html5/#servlet-architecture)
+
+开发者只需要引入一个依赖，就可以让 Spring Security 对应用进行保护。Spring Security 又是如何做到的呢？
+
+在 Spring Security 中*认证、授权* 等功能都是基于**过滤器**完成的。
+
+![image-20220110120349053](imgs/image-20220110120349053.png)
+
+需要注意的是，默认过滤器并不是直接放在 Web 项目的原生过滤器链中，而是通过一个
+FlterChainProxy 来统一管理。Spring Security 中的过滤器链通过 FilterChainProxy 嵌入到 Web项目的原生过滤器链中。FilterChainProxy  作为一个顶层的管理者，将统一管理 Security Filter。FilterChainProxy 本身是通过 Spring 框架提供的 DelegatingFilterProxy 整合到原生的过滤器链中。
+
+### 1）Security Filters
+
+那么在 Spring Security 中给我们提供那些过滤器? 默认情况下那些过滤器会被加载呢？
+
+| 过滤器                                    | 过滤器作用                                               | 默认是否加载 |
+| ----------------------------------------- | -------------------------------------------------------- | ------------ |
+| ChannelProcessingFilter                   | 过滤请求协议 HTTP 、HTTPS                                | NO           |
+| `WebAsyncManagerIntegrationFilter`        | 将 WebAsyncManger 与 SpringSecurity 上下文进行集成       | YES          |
+| `SecurityContextPersistenceFilter`        | 在处理请求之前,将安全信息加载到 SecurityContextHolder 中 | YES          |
+| `HeaderWriterFilter`                      | 处理头信息加入响应中                                     | YES          |
+| CorsFilter                                | 处理跨域问题                                             | NO           |
+| `CsrfFilter`                              | 处理 CSRF 攻击                                           | YES          |
+| `LogoutFilter`                            | 处理注销登录                                             | YES          |
+| OAuth2AuthorizationRequestRedirectFilter  | 处理 OAuth2 认证重定向                                   | NO           |
+| Saml2WebSsoAuthenticationRequestFilter    | 处理 SAML 认证                                           | NO           |
+| X509AuthenticationFilter                  | 处理 X509 认证                                           | NO           |
+| AbstractPreAuthenticatedProcessingFilter  | 处理预认证问题                                           | NO           |
+| CasAuthenticationFilter                   | 处理 CAS 单点登录                                        | NO           |
+| OAuth2LoginAuthenticationFilter           | 处理 OAuth2 认证                                         | NO           |
+| Saml2WebSsoAuthenticationFilter           | 处理 SAML 认证                                           | NO           |
+| `UsernamePasswordAuthenticationFilter`    | 处理表单登录                                             | YES          |
+| OpenIDAuthenticationFilter                | 处理 OpenID 认证                                         | NO           |
+| `DefaultLoginPageGeneratingFilter`        | 配置默认登录页面                                         | YES          |
+| `DefaultLogoutPageGeneratingFilter`       | 配置默认注销页面                                         | YES          |
+| ConcurrentSessionFilter                   | 处理 Session 有效期                                      | NO           |
+| DigestAuthenticationFilter                | 处理 HTTP 摘要认证                                       | NO           |
+| BearerTokenAuthenticationFilter           | 处理 OAuth2 认证的 Access Token                          | NO           |
+| `BasicAuthenticationFilter`               | 处理 HttpBasic 登录                                      | YES          |
+| `RequestCacheAwareFilter`                 | 处理请求缓存                                             | YES          |
+| `SecurityContextHolderAwareRequestFilter` | 包装原始请求                                             | YES          |
+| JaasApiIntegrationFilter                  | 处理 JAAS 认证                                           | NO           |
+| RememberMeAuthenticationFilter            | 处理 RememberMe 登录                                     | NO           |
+| `AnonymousAuthenticationFilter`           | 配置匿名认证                                             | YES          |
+| OAuth2AuthorizationCodeGrantFilter        | 处理OAuth2认证中授权码                                   | NO           |
+| `SessionManagementFilter`                 | 处理 session 并发问题                                    | YES          |
+| `ExceptionTranslationFilter`              | 处理认证/授权中的异常                                    | YES          |
+| `FilterSecurityInterceptor`               | 处理授权相关                                             | YES          |
+| SwitchUserFilter                          | 处理账户切换                                             | NO           |
+
+可以看出，Spring Security 提供了 30 多个过滤器。默认情况下Spring Boot 在对 Spring Security 进入自动化配置时，会创建一个名为 SpringSecurityFilerChain 的过滤器，并注入到 Spring 容器中，这个过滤器将负责所有的安全管理，包括用户认证、授权、重定向到登录页面等。具体可以参考WebSecurityConfiguration的源码:
+
+### 2）SpringBootWebSecurityConfiguration
+
+这个类是 spring boot 自动配置类，通过这个源码得知，默认情况下对所有请求进行权限控制:
+
+```java
+@Configuration(proxyBeanMethods = false)
+@ConditionalOnDefaultWebSecurity
+@ConditionalOnWebApplication(type = Type.SERVLET)
+class SpringBootWebSecurityConfiguration {
+	@Bean
+	@Order(SecurityProperties.BASIC_AUTH_ORDER)
+	SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) 
+    throws Exception {
+			http.authorizeRequests().anyRequest()
+      .authenticated().and().formLogin().and().httpBasic();
+		return http.build();
+	}
+}
+```
+
+**这就是为什么在引入 Spring Security 中没有任何配置情况下，请求会被拦截的原因！**
+
+通过上面对自动配置分析，我们也能看出默认生效条件为：
+
+```java
+class DefaultWebSecurityCondition extends AllNestedConditions {
+
+	DefaultWebSecurityCondition() {
+		super(ConfigurationPhase.REGISTER_BEAN);
+	}
+
+	@ConditionalOnClass({ SecurityFilterChain.class, HttpSecurity.class })
+	static class Classes {
+
+	}
+
+	@ConditionalOnMissingBean({ WebSecurityConfigurerAdapter.class, SecurityFilterChain.class })
+	static class Beans {
+
+	}
+
+}
+```
+
+- 条件一 classpath中存在 SecurityFilterChain.class, HttpSecurity.class（肯定有）
+- 条件二 没有自定义 WebSecurityConfigurerAdapter.class, SecurityFilterChain.class
+
+默认情况下，条件都是满足的。WebSecurityConfigurerAdapter 这个类极其重要，Spring Security 核心配置都在这个类中：
+
+![image-20220112095638356](imgs/image-20220112095638356.png)
+
+如果要对 Spring Security 进行自定义配置，就要自定义这个类实例，通过覆盖类中方法达到修改默认配置的目的。
