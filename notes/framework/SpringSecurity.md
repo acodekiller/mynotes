@@ -213,3 +213,138 @@ class DefaultWebSecurityCondition extends AllNestedConditions {
 ![image-20220112095638356](imgs/image-20220112095638356.png)
 
 如果要对 Spring Security 进行自定义配置，就要自定义这个类实例，通过覆盖类中方法达到修改默认配置的目的。
+
+### 3）流程分析
+
+![image-20220111100643506](imgs/image-20220111100643506.png)
+
+1. 请求 /hello 接口，在引入 spring security 之后会先经过一系列过滤器；
+2. 在请求到达 FilterSecurityInterceptor时，发现请求并未认证。请求拦截下来，并抛出 AccessDeniedException 异常。
+3. 抛出 AccessDeniedException 的异常会被 ExceptionTranslationFilter 捕获，这个 Filter 中会调用 LoginUrlAuthenticationEntryPoint#commence 方法给客户端返回 302，要求客户端进行重定向到 /login 页面。
+4. 客户端发送 /login 请求。
+5. /login 请求会再次被拦截器中 DefaultLoginPageGeneratingFilter 拦截到，并在拦截器中返回生成登录页面。
+
+**就是通过这种方式，Spring Security 默认过滤器中生成了登录页面，并返回！**
+
+### 4）默认用户生成
+
+1. 查看 SpringBootWebSecurityConfiguration#defaultSecurityFilterChain 方法表单登录
+
+![image-20220112141503914](imgs/image-20220112141503914.png)
+
+2. 处理登录为 FormLoginConfigurer 类中 调用 UsernamePasswordAuthenticationFilter这个类实例
+
+![image-20220111104043636](imgs/image-20220111104043636.png)
+
+3. 查看类中 UsernamePasswordAuthenticationFilter#attempAuthentication 方法得知实际调用 AuthenticationManager 中 authenticate 方法
+
+![image-20220111103955782](imgs/image-20220111103955782.png)
+
+4. 调用 ProviderManager 类中方法 authenticate
+
+![image-20220111104357476](imgs/image-20220111104357476.png)
+
+5. 调用了 ProviderManager 实现类中 AbstractUserDetailsAuthenticationProvider类中方法
+
+![image-20220111104627002](imgs/image-20220111104627002.png)
+
+6. 最终调用实现类 DaoAuthenticationProvider 类中方法比较
+
+![image-20220111105029814](imgs/image-20220111105029814.png)
+
+![image-20220111103729166](imgs/image-20220111103729166.png)
+
+### 5）UserDetailService
+
+通过刚才源码分析也能得知 UserDetailService 是顶层父接口，接口中 loadUserByUserName 方法是用来在认证时进行用户名认证方法，默认实现使用是内存实现，如果想要修改数据库实现我们只需要自定义 UserDetailService 实现，最终返回 UserDetails 实例即可。
+
+```java
+public interface UserDetailsService {
+	UserDetails loadUserByUsername(String username) throws UsernameNotFoundException;
+}
+```
+
+![image-20220111110043474](imgs/image-20220111110043474.png)
+
+### 6）UserDetailsServiceAutoConfiguration
+
+梳理关键部分：
+
+```java
+@Configuration(proxyBeanMethods = false)
+@ConditionalOnClass(AuthenticationManager.class)
+@ConditionalOnBean(ObjectPostProcessor.class)
+@ConditionalOnMissingBean(
+		value = { AuthenticationManager.class, AuthenticationProvider.class, UserDetailsService.class,
+				AuthenticationManagerResolver.class },
+		type = { "org.springframework.security.oauth2.jwt.JwtDecoder",
+				"org.springframework.security.oauth2.server.resource.introspection.OpaqueTokenIntrospector",
+				"org.springframework.security.oauth2.client.registration.ClientRegistrationRepository" })
+public class UserDetailsServiceAutoConfiguration {
+  //....
+  @Bean
+	@Lazy
+	public InMemoryUserDetailsManager inMemoryUserDetailsManager(SecurityProperties properties,
+			ObjectProvider<PasswordEncoder> passwordEncoder) {
+		SecurityProperties.User user = properties.getUser();
+		List<String> roles = user.getRoles();
+		return new InMemoryUserDetailsManager(
+				User.withUsername(user.getName()).password(getOrDeducePassword(user, passwordEncoder.getIfAvailable()))
+						.roles(StringUtils.toStringArray(roles)).build());
+	}
+  //...
+}
+```
+
+**结论：**
+
+1. 从自动配置源码中得知当 classpath 下存在 AuthenticationManager 类
+2. 当前项目中，系统没有提供 AuthenticationManager.class、 AuthenticationProvider.class、UserDetailsService.class、
+   	AuthenticationManagerResolver.class、实例
+
+**默认情况下都会满足，此时Spring Security会提供一个 InMemoryUserDetailsManager 实例**
+
+![image-20220111111244739](imgs/image-20220111111244739.png)
+
+```java
+@ConfigurationProperties(prefix = "spring.security")
+public class SecurityProperties {
+	private final User user = new User();
+	public User getUser() {
+		return this.user;
+  }
+  //....
+	public static class User {
+		private String name = "user";
+		private String password = UUID.randomUUID().toString();
+		private List<String> roles = new ArrayList<>();
+		private boolean passwordGenerated = true;
+		//get set ...
+	}
+}
+```
+
+**这就是默认生成 user 以及 uuid 密码过程! 另外看明白源码之后，就知道只要在配置文件中加入如下配置可以对内存中用户和密码进行覆盖。**
+
+```properties
+spring.security.user.name=root
+spring.security.user.password=root
+spring.security.user.roles=admin,users
+```
+
+### 7）总结
+
+- AuthenticationManager、ProviderManger、以及 AuthenticationProvider 关系
+
+![image-20220112150612023](imgs/image-20220112150612023.png)
+
+- **WebSecurityConfigurerAdapter** 扩展 Spring Security 所有默认配置
+
+![image-20220112150820284](imgs/image-20220112150820284.png)
+
+- **UserDetailService** 用来修改默认认证的数据源信息
+
+![image-20220112150929998](imgs/image-20220112150929998.png)
+
+# 三、实战
+
