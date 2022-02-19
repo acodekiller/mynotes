@@ -346,5 +346,555 @@ spring.security.user.roles=admin,users
 
 ![image-20220112150929998](imgs/image-20220112150929998.png)
 
-# 三、实战
+# 三、自定义认证
+
+## 1、自定义资源权限规则
+
+- /index  公共资源
+- /hello .... 受保护资源 权限管理
+
+在项目中添加如下配置就可以实现对资源权限规则设定：
+
+```java
+@Configuration
+public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.authorizeHttpRequests()
+                .mvcMatchers("/index").permitAll()
+                .anyRequest().authenticated()
+                .and().formLogin();
+    }
+}
+```
+
+> 说明
+>
+> - permitAll() 代表放行该资源,该资源为公共资源 无需认证和授权可以直接访问
+> - anyRequest().authenticated() 代表所有请求,必须认证之后才能访问
+> - formLogin() 代表开启表单认证
+>
+> 注意: 放行资源必须放在所有认证请求之前!
+
+## 2、自定义登录界面
+
+1. 引入thymeleaf
+
+```xml
+<!--thymeleaf-->
+<dependency>
+  <groupId>org.springframework.boot</groupId>
+  <artifactId>spring-boot-starter-thymeleaf</artifactId>
+</dependency>
+```
+
+2. 定义登录页面 controller
+
+```java
+@Controller
+public class LoginController {
+
+    @RequestMapping("/login.html")
+    public String login() {
+        return "login";
+    }
+}
+```
+
+3. 在 templates 中定义登录界面
+
+```html
+<!DOCTYPE html>
+<html lang="en" xmlns:th="https://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>登录</title>
+</head>
+<body>
+<h1>用户登录</h1>
+<form method="post" th:action="@{/doLogin}">
+    用户名:<input name="uname" type="text"/><br>
+    密码:<input name="passwd" type="password"/><br>
+    <input type="submit" value="登录"/>
+</form>
+</body>
+</html>
+```
+
+**需要注意的是**
+
+- 登录表单 method 必须为 `post`，action 的请求路径为 `/doLogin`
+- 用户名的 name 属性为 `uname`
+- 密码的 name 属性为 `passwd`
+
+配置 Spring Security 配置类
+
+```java
+@Configuration
+public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+         http.authorizeHttpRequests()
+                .mvcMatchers("/login.html").permitAll()
+                .mvcMatchers("/index").permitAll()
+                .anyRequest().authenticated()
+                .and()
+                .formLogin()
+                .loginPage("/login.html")
+                .loginProcessingUrl("/doLogin")
+                .usernameParameter("uname")			//默认为“username”
+                .passwordParameter("passwd")		//默认为“password”
+                .successForwardUrl("/index") 	 //forward 跳转      注意:不会跳转到之前请求路径
+                //.defaultSuccessUrl("/index")   //redirect 重定向    注意:如果之前请求路径,会有优先跳转之前请求路径
+                .failureUrl("/login.html")
+                .and()
+                .csrf().disable();//这里先关闭 CSRF
+    }
+}
+```
+
+successForwardUrl 、defaultSuccessUrl 这两个方法都可以实现成功之后跳转
+
+- successForwardUrl  默认使用 `forward `跳转      `注意:不会跳转到之前请求路径`
+
+- defaultSuccessUrl   默认使用 `redirect` 跳转      `注意:如果之前请求路径,会有优先跳转之前请求路径,可以传入第二个参数进行修改`
+
+## 3、自定义登录成功处理(前后分离)
+
+有时候页面跳转并不能满足我们，特别是在前后端分离开发中就不需要成功之后跳转页面。只需要给前端返回一个 JSON 通知登录成功还是失败与否。这个时候可以通过自定义 `AuthenticationSucccessHandler` 实现。
+
+```java
+public interface AuthenticationSuccessHandler {
+
+	/**
+	 * Called when a user has been successfully authenticated.
+	 * @param request the request which caused the successful authentication
+	 * @param response the response
+	 * @param authentication the <tt>Authentication</tt> object which was created during
+	 * the authentication process.
+	 */
+	void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
+			Authentication authentication) throws IOException, ServletException;
+}
+```
+
+**根据接口的描述信息,也可以得知登录成功会自动回调这个方法，进一步查看它的默认实现，你会发现successForwardUrl、defaultSuccessUrl也是由它的子类实现的**
+
+1. 自定义 AuthenticationSuccessHandler 实现
+
+```java
+public class MyAuthenticationSuccessHandler implements AuthenticationSuccessHandler {
+    @Override
+    public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
+        Map<String, Object> result = new HashMap<String, Object>();
+        result.put("msg", "登录成功");
+        result.put("status", 200);
+        response.setContentType("application/json;charset=UTF-8");
+        String s = new ObjectMapper().writeValueAsString(result);
+        response.getWriter().println(s);
+    }
+}
+```
+
+2. 配置 AuthenticationSuccessHandler
+
+```java
+@Configuration
+public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.authorizeHttpRequests()
+                //...
+                .and()
+                .formLogin()
+                //....
+                .successHandler(new MyAuthenticationSuccessHandler())
+                .failureUrl("/login.html")
+                .and()
+                .csrf().disable();//这里先关闭 CSRF
+    }
+}
+```
+
+![image-20220113062644363-2026405](imgs/image-20220113062644363-2026405.png)
+
+## 4、显示登录失败信息
+
+为了能更直观在登录页面看到异常错误信息，可以在登录页面中直接获取异常信息。Spring Security 在登录失败之后会将异常信息存储到 `request` 、`session`作用域中 key 为 `SPRING_SECURITY_LAST_EXCEPTION` 命名属性中，源码可以参考 SimpleUrlAuthenticationFailureHandler ：
+
+![image-20220113060257662](imgs/image-20220113060257662.png)
+
+1. 显示异常信息
+
+```html
+<!DOCTYPE html>
+<html lang="en" xmlns:th="https://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>登录</title>
+</head>
+<body>
+  ....
+  <div th:text="${SPRING_SECURITY_LAST_EXCEPTION}"></div>
+</body>
+</html>
+```
+
+2. 配置
+
+```java
+@Configuration
+public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
+
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.authorizeHttpRequests()
+              	//..
+                .and()
+                .formLogin()
+                //....
+                //.failureUrl("/login.html")
+                .failureForwardUrl("/login.html")
+                .and()
+                .csrf().disable();//这里先关闭 CSRF
+    }
+}
+
+```
+
+- failureUrl、failureForwardUrl 关系类似于之前提到的 successForwardUrl 、defaultSuccessUrl 方法
+  - failureUrl 失败以后的重定向跳转
+  - failureForwardUrl 失败以后的 forward 跳转 `注意:因此获取 request 中异常信息,这里只能使用failureForwardUrl`
+
+> 若使用failureUrl ，则需将前端页面改为：
+>
+> ```html
+> <div th:text="${session.SPRING_SECURITY_LAST_EXCEPTION}"></div>
+> ```
+
+## 5、自定义登录失败处理(前后分离)
+
+和自定义登录成功处理一样，Spring Security 同样为前后端分离开发提供了登录失败的处理，这个类就是  AuthenticationFailureHandler，源码为：
+
+```java
+public interface AuthenticationFailureHandler {
+
+	/**
+	 * Called when an authentication attempt fails.
+	 * @param request the request during which the authentication attempt occurred.
+	 * @param response the response.
+	 * @param exception the exception which was thrown to reject the authentication
+	 * request.
+	 */
+	void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
+			AuthenticationException exception) throws IOException, ServletException;
+
+}
+```
+
+**根据接口的描述信息,也可以得知登录失败会自动回调这个方法，进一步查看它的默认实现，你会发现failureUrl、failureForwardUrl也是由它的子类实现的。**
+
+![image-20220113062114741](imgs/image-20220113062114741.png)
+
+1. 自定义 AuthenticationFailureHandler 实现
+
+```java
+public class MyAuthenticationFailureHandler implements AuthenticationFailureHandler {
+
+    @Override
+    public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response, AuthenticationException exception) throws IOException, ServletException {
+        Map<String, Object> result = new HashMap<String, Object>();
+        result.put("msg", "登录失败: "+exception.getMessage());
+        result.put("status", 500);
+        response.setContentType("application/json;charset=UTF-8");
+        String s = new ObjectMapper().writeValueAsString(result);
+        response.getWriter().println(s);
+    }
+}
+```
+
+2. 配置 AuthenticationFailureHandler
+
+```java
+@Configuration
+public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
+
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.authorizeHttpRequests()
+	              //...
+                .and()
+                .formLogin()
+               	//..
+                .failureHandler(new MyAuthenticationFailureHandler())
+                .and()
+                .csrf().disable();//这里先关闭 CSRF
+    }
+}
+```
+
+![image-20220113062617937-2026380](imgs/image-20220113062617937-2026380.png)
+
+## 6、注销登录
+
+Spring Security 中也提供了默认的注销登录配置，在开发时也可以按照自己需求对注销进行个性化定制。
+
+### 1）开启注销登录`默认开启`
+
+```java
+@Configuration
+public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
+@Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.authorizeHttpRequests()
+                //...
+                .and()
+                .formLogin()
+                //...
+                .and()
+                .logout()
+                .logoutUrl("/logout")
+                .invalidateHttpSession(true)
+                .clearAuthentication(true)
+                .logoutSuccessUrl("/login.html")
+                .and()
+                .csrf().disable();//这里先关闭 CSRF
+    }
+}
+```
+
+- 通过 logout() 方法开启注销配置
+- logoutUrl 指定退出登录请求地址，默认是 GET 请求，路径为 `/logout`
+- invalidateHttpSession 退出时是否是 session 失效，默认值为 true
+- clearAuthentication 退出时是否清除认证信息，默认值为 true
+- logoutSuccessUrl 退出登录时跳转地址
+
+### 2）配置多个注销登录请求
+
+如果项目中有需要，开发者还可以配置多个注销登录的请求，同时还可以指定请求的方法：
+
+```java
+@Configuration
+public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
+		@Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.authorizeHttpRequests()
+                //...
+                .and()
+                .formLogin()
+                //...
+                .and()
+                .logout()
+                .logoutRequestMatcher(new OrRequestMatcher(
+                        new AntPathRequestMatcher("/logout1","GET"),
+                        new AntPathRequestMatcher("/logout","GET")
+                ))
+                .invalidateHttpSession(true)
+                .clearAuthentication(true)
+                .logoutSuccessUrl("/login.html")
+                .and()
+                .csrf().disable();//这里先关闭 CSRF
+    }
+}
+```
+
+### 3）前后端分离注销登录配置(前后分离)
+
+如果是前后端分离开发，注销成功之后就不需要页面跳转了，只需要将注销成功的信息返回前端即可，此时我们可以通过自定义 LogoutSuccessHandler  实现来返回注销之后信息：
+
+```java
+public class MyLogoutSuccessHandler implements LogoutSuccessHandler {
+    @Override
+    public void onLogoutSuccess(HttpServletRequest request, HttpServletResponse response, Authentication authentication) throws IOException, ServletException {
+        Map<String, Object> result = new HashMap<String, Object>();
+        result.put("msg", "注销成功");
+        result.put("status", 200);
+        response.setContentType("application/json;charset=UTF-8");
+        String s = new ObjectMapper().writeValueAsString(result);
+        response.getWriter().println(s);
+    }
+}
+```
+
+配置：
+
+```java
+@Configuration
+public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.authorizeHttpRequests()
+          			//....
+                .and()
+                .formLogin()
+ 								//...
+                .and()
+                .logout()
+                //.logoutUrl("/logout")
+                .logoutRequestMatcher(new OrRequestMatcher(
+                        new AntPathRequestMatcher("/logout1","GET"),
+                        new AntPathRequestMatcher("/logout","GET")
+                ))
+                .invalidateHttpSession(true)
+                .clearAuthentication(true)
+                //.logoutSuccessUrl("/login.html")
+                .logoutSuccessHandler(new MyLogoutSuccessHandler())
+                .and()
+                .csrf().disable();//这里先关闭 CSRF
+    }
+}
+```
+
+![image-20220113114133687](imgs/image-20220113114133687.png)
+
+# 四、登录用户数据获取
+
+## 1、SpringContextHolder
+
+Spring Security 会将登录用户数据保存在 Session 中。但是，为了使用方便,Spring Security在此基础上还做了一些改进，其中最主要的一个变化就是线程绑定。当用户登录成功后,Spring Security 会将登录成功的用户信息保存到 SecurityContextHolder 中。
+
+​	SecurityContextHolder 中的数据保存默认是通过ThreadLocal 来实现的，使用 ThreadLocal 创建的变量只能被当前线程访问，不能被其他线程访问和修改，也就是用户数据和请求线程绑定在一起。当登录请求处理完毕后，Spring Security 会将 SecurityContextHolder 中的数据拿出来保存到 Session 中，同时将 SecurityContexHolder 中的数据清空。以后每当有请求到来时，Spring Security 就会先从 Session 中取出用户登录数据，保存到SecurityContextHolder 中，方便在该请求的后续处理过程中使用，同时在请求结束时将 SecurityContextHolder 中的数据拿出来保存到 Session 中，然后将SecurityContextHolder 中的数据清空。
+
+​	实际上 SecurityContextHolder 中存储是 SecurityContext，在 SecurityContext 中存储是 Authentication。
+
+![image-20220113115956334](imgs/image-20220113115956334.png)
+
+这种设计是典型的策略设计模式：
+
+```java
+public class SecurityContextHolder {
+	public static final String MODE_THREADLOCAL = "MODE_THREADLOCAL";
+	public static final String MODE_INHERITABLETHREADLOCAL = "MODE_INHERITABLETHREADLOCAL";
+	public static final String MODE_GLOBAL = "MODE_GLOBAL";
+	private static final String MODE_PRE_INITIALIZED = "MODE_PRE_INITIALIZED";
+	private static SecurityContextHolderStrategy strategy;
+  //....
+	private static void initializeStrategy() {
+		if (MODE_PRE_INITIALIZED.equals(strategyName)) {
+			Assert.state(strategy != null, "When using " + MODE_PRE_INITIALIZED
+					+ ", setContextHolderStrategy must be called with the fully constructed strategy");
+			return;
+		}
+		if (!StringUtils.hasText(strategyName)) {
+			// Set default
+			strategyName = MODE_THREADLOCAL;
+		}
+		if (strategyName.equals(MODE_THREADLOCAL)) {
+			strategy = new ThreadLocalSecurityContextHolderStrategy();
+			return;
+		}
+		if (strategyName.equals(MODE_INHERITABLETHREADLOCAL)) {
+			strategy = new InheritableThreadLocalSecurityContextHolderStrategy();
+			return;
+		}
+		if (strategyName.equals(MODE_GLOBAL)) {
+			strategy = new GlobalSecurityContextHolderStrategy();
+			return;
+		}
+    //.....
+  }
+}
+```
+
+1. `MODE_THREADLOCAL`：这种存放策略是将 SecurityContext 存放在 ThreadLocal中，大家知道 Threadlocal 的特点是在哪个线程中存储就要在哪个线程中读取，这其实非常适合 web 应用，因为在默认情况下，一个请求无论经过多少 Filter 到达 Servlet，都是由一个线程来处理的。这也是 SecurityContextHolder 的默认存储策略，这种存储策略意味着如果在具体的业务处理代码中，开启了子线程，在子线程中去获取登录用户数据，就会获取不到。
+2. `MODE_INHERITABLETHREADLOCAL`：这种存储模式适用于多线程环境，如果希望在子线程中也能够获取到登录用户数据，那么可以使用这种存储模式。
+3. `MODE_GLOBAL`：这种存储模式实际上是将数据保存在一个静态变量中，在 JavaWeb开发中，这种模式很少使用到。
+
+## 2、SecurityContextHolderStrategy
+
+通过 SecurityContextHolder 可以得知，SecurityContextHolderStrategy 接口用来定义存储策略方法
+
+```java
+public interface SecurityContextHolderStrategy {
+	void clearContext();
+	SecurityContext getContext();
+	void setContext(SecurityContext context);
+	SecurityContext createEmptyContext();
+}
+```
+
+接口中一共定义了四个方法：
+
+- `clearContext`：该方法用来清除存储的 SecurityContext对象。
+- `getContext`：该方法用来获取存储的 SecurityContext 对象。
+- `setContext`：该方法用来设置存储的 SecurityContext 对象。
+- `create Empty Context`：该方法则用来创建一个空的 SecurityContext 对象。
+
+![image-20220113125407538-2049649](imgs/image-20220113125407538-2049649.png)
+
+从上面可以看出每一个实现类对应一种策略的实现。
+
+## 3、代码中获取认证之后的用户数据(前后分离)
+
+```java
+@RestController
+public class HelloController {
+    @RequestMapping("/hello")
+    public String hello() {
+      Authentication authentication = SecurityContextHolder
+        .getContext().getAuthentication();
+      User principal = (User) authentication.getPrincipal();
+      System.out.println("身份 :"+principal.getUsername());
+      System.out.println("凭证 :"+authentication.getCredentials());
+      System.out.println("权限 :"+authentication.getAuthorities());
+      return "hello security";
+    }
+}
+```
+
+多线程情况下获取用户数据：
+
+```java
+@RestController
+public class HelloController {
+    @RequestMapping("/hello")
+    public String hello() {
+      new Thread(()->{
+        Authentication authentication = SecurityContextHolder
+          .getContext().getAuthentication();
+        User principal = (User) authentication.getPrincipal();
+        System.out.println("身份 :"+principal.getUsername());
+        System.out.println("凭证 :"+authentication.getCredentials());
+        System.out.println("权限 :"+authentication.getAuthorities());
+      }).start();
+      return "hello security";
+    }
+}
+```
+
+![image-20220113124141492](imgs/image-20220113124141492.png)
+
+## 4、页面上获取用户信息(前后不分离)
+
+1. 引入依赖
+
+```xml
+<dependency>
+  <groupId>org.thymeleaf.extras</groupId>
+  <artifactId>thymeleaf-extras-springsecurity5</artifactId>
+  <version>3.0.4.RELEASE</version>
+</dependency>
+```
+
+2. 页面加入命名空间
+
+```html
+<html lang="en" xmlns:th="https://www.thymeleaf.org" 
+xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+```
+
+3. 页面中使用
+
+```html
+<!--获取认证用户名-->
+<ul>
+  <li sec:authentication="principal.username"></li>
+  <li sec:authentication="principal.authorities"></li>
+  <li sec:authentication="principal.accountNonExpired"></li>
+  <li sec:authentication="principal.accountNonLocked"></li>
+  <li sec:authentication="principal.credentialsNonExpired"></li>
+</ul>
+```
+
+# 五、自定义数据源
 
