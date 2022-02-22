@@ -898,3 +898,414 @@ xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
 
 # 五、自定义数据源
 
+## 1、认证流程分析
+
+[官网地址](https://docs.spring.io/spring-security/reference/servlet/authentication/architecture.html)
+
+![image-20220118060526805](imgs/image-20220118060526805.png)
+
+- 发起认证请求，请求中携带用户名、密码，该请求会被`UsernamePasswordAuthenticationFilter` 拦截
+- 在`UsernamePasswordAuthenticationFilter`的`attemptAuthentication`方法中将请求中用户名和密码，封装为`Authentication`(UsernamePasswordAuthenticationToken)对象，并交给`AuthenticationManager` 进行认证
+- 认证成功，将认证信息存储到 SecurityContextHodler 以及调用记住我等，并回调 `AuthenticationSuccessHandler` 处理
+- 认证失败，清除 SecurityContextHodler 以及 记住我中信息，回调 `AuthenticationFailureHandler` 处理
+
+## 2、三者关系
+
+从上面分析中得知，AuthenticationManager 是认证的核心类，但实际上在底层真正认证时还离不开 ProviderManager 以及  AuthenticationProvider 。他们三者关系是样的呢？
+
+- `AuthenticationManager` 是一个认证管理器，它定义了 Spring Security 过滤器要执行认证操作。
+- `ProviderManager`是AuthenticationManager接口的实现类。Spring Security 认证时默认使用就是 ProviderManager。
+- `AuthenticationProvider` 就是针对不同的身份类型执行的具体的身份认证。
+
+**AuthenticationManager 与 ProviderManager**
+
+![image-20220118061756972](imgs/image-20220118061756972.png)
+
+​	ProviderManager 是 AuthenticationManager 的唯一实现，也是 Spring Security 默认使用实现。从这里不难看出默认情况下AuthenticationManager 就是一个ProviderManager。（其它的是内部类或者是私有类）
+
+**ProviderManager 与 AuthenticationProvider**
+
+摘自官方: https://docs.spring.io/spring-security/reference/servlet/authentication/architecture.html
+
+![image-20220118060824066](imgs/image-20220118060824066.png)
+
+​	在 Spring Seourity 中，允许系统同时支持多种不同的认证方式，例如同时支持用户名/密码认证、ReremberMe 认证、手机号码动态认证等，而不同的认证方式对应了不同的 AuthenticationProvider，所以一个完整的认证流程可能由多个 AuthenticationProvider 来提供。
+
+​	多个 AuthenticationProvider 将组成一个列表，这个列表将由 ProviderManager 代理。换句话说，在ProviderManager 中存在一个 AuthenticationProvider 列表，在Provider Manager 中遍历列表中的每一个 AuthenticationProvider 去执行身份认证，最终得到认证结果。
+
+​	ProviderManager 本身也可以再配置一个 AuthenticationManager 作为 parent，这样当ProviderManager 认证失败之后，就可以进入到 parent 中再次进行认证。理论上来说，ProviderManager 的 parent 可以是任意类型的 AuthenticationManager，但是通常都是由ProviderManager 来扮演 parent 的角色，也就是 ProviderManager 是 ProviderManager 的 parent。
+
+​	ProviderManager 本身也可以有多个，多个ProviderManager 共用同一个 parent。有时，一个应用程序有受保护资源的逻辑组（例如，所有符合路径模式的网络资源，如/api/**），每个组可以有自己的专用 AuthenticationManager。通常，每个组都是一个ProviderManager，它们共享一个父级。然后，父级是一种 ` 全局 `资源，作为所有提供者的后备资源。
+
+根据上面的介绍，我们绘出新的 AuthenticationManager、ProvideManager 和 AuthentictionProvider 关系
+
+![image-20220118061343516](imgs/image-20220118061343516.png)
+
+ 弄清楚认证原理之后我们来看下具体认证时数据源的获取。默认情况下` AuthenticationProvider`  是由 `DaoAuthenticationProvider`类来实现认证的，在`DaoAuthenticationProvider` 认证时又通过 `UserDetailsService`完成数据源的校验。他们之间调用关系如下：
+
+![image-20220114163045543](imgs/image-20220114163045543.png)
+
+> **总结** 
+>
+> AuthenticationManager 是认证管理器，在 Spring Security 中有全局AuthenticationManager，也可以有局部AuthenticationManager。全局的AuthenticationManager用来对全局认证进行处理，局部的AuthenticationManager用来对某些特殊资源认证处理。当然无论是全局认证管理器还是局部认证管理器都是由 ProviderManger 进行实现。 每一个ProviderManger中都代理一个AuthenticationProvider的列表，列表中每一个实现代表一种身份认证方式。认证时底层数据源需要调用 UserDetailService 来实现。
+
+## 3、配置全局 AuthenticationManager
+
+### 1）默认的全局 AuthenticationManager
+
+```java
+@Configuration
+public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
+  @Autowired
+  public void initialize(AuthenticationManagerBuilder builder) {
+    //builder..
+  }
+}
+```
+
+- springboot 对 security 进行自动配置时自动在工厂中创建一个全局AuthenticationManager
+
+**总结**
+
+1. 默认自动配置创建全局AuthenticationManager 默认找当前项目中是否存在自定义 UserDetailService 实例 自动将当前项目 UserDetailService 实例设置为数据源
+2. 默认自动配置创建全局AuthenticationManager 在工厂中使用时直接在代码中注入即可
+
+### 2）自定义全局 AuthenticationManager
+
+```java
+@Configuration
+public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
+  @Override
+  public void configure(AuthenticationManagerBuilder builder) {
+  	//builder ....
+  }
+}
+```
+
+**总结**
+
+一旦通过 configure 方法自定义 AuthenticationManager实现：
+
+- 就会将工厂中自动配置AuthenticationManager 进行覆盖；
+- 需要在实现中指定认证数据源对象 UserDetaiService 实例；
+- 这种方式创建AuthenticationManager对象工厂内部本地一个 AuthenticationManager 对象 不允许在其他自定义组件中进行注入。（其它地方无法使用@Autowired的方式注入AuthenticationManager 实例）可以用下面的方法将AuthenticationManager暴露。
+
+用来在工厂中暴露自定义AuthenticationManager 实例
+
+```java
+@Configuration
+public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
+  
+    //1.自定义AuthenticationManager  推荐  并没有在工厂中暴露出来
+    @Override
+    public void configure(AuthenticationManagerBuilder builder) throws Exception {
+        System.out.println("自定义AuthenticationManager: " + builder);
+        builder.userDetailsService(userDetailsService());
+    }
+
+    //作用: 用来将自定义AuthenticationManager在工厂中进行暴露,可以在任何位置注入
+    @Override
+    @Bean
+    public AuthenticationManager authenticationManagerBean() throws Exception {
+        return super.authenticationManagerBean();
+    }
+}
+
+```
+
+## 4、自定义数据源实战
+
+### 1）自定义内存数据源
+
+```java
+@Configuration
+public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
+
+    @Bean
+    public UserDetailsService userDetailsService(){
+        InMemoryUserDetailsManager inMemoryUserDetailsManager
+                = new InMemoryUserDetailsManager();
+        UserDetails u1 = User.withUsername("zhangs")
+                .password("{noop}111").roles("USER").build();	//{noop}表示明文密码
+        inMemoryUserDetailsManager.createUser(u1);
+        return inMemoryUserDetailsManager;
+    }
+
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) 
+      throws Exception {
+        auth.userDetailsService(userDetailsService());
+    }  	
+}
+```
+
+### 2）自定义数据库数据源
+
+1. 设计表结构
+
+   ```sql
+   -- 用户表
+   CREATE TABLE `user`
+   (
+       `id`                    int(11) NOT NULL AUTO_INCREMENT,
+       `username`              varchar(32)  DEFAULT NULL,
+       `password`              varchar(255) DEFAULT NULL,
+       `enabled`               tinyint(1) DEFAULT NULL,
+       `accountNonExpired`     tinyint(1) DEFAULT NULL,
+       `accountNonLocked`      tinyint(1) DEFAULT NULL,
+       `credentialsNonExpired` tinyint(1) DEFAULT NULL,
+       PRIMARY KEY (`id`)
+   ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8;
+   -- 角色表
+   CREATE TABLE `role`
+   (
+       `id`      int(11) NOT NULL AUTO_INCREMENT,
+       `name`    varchar(32) DEFAULT NULL,
+       `name_zh` varchar(32) DEFAULT NULL,
+       PRIMARY KEY (`id`)
+   ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8;
+   -- 用户角色关系表
+   CREATE TABLE `user_role`
+   (
+       `id`  int(11) NOT NULL AUTO_INCREMENT,
+       `uid` int(11) DEFAULT NULL,
+       `rid` int(11) DEFAULT NULL,
+       PRIMARY KEY (`id`),
+       KEY   `uid` (`uid`),
+       KEY   `rid` (`rid`)
+   ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8;
+   ```
+
+2. 插入测试数据
+
+   ```sql
+   -- 插入用户数据
+   BEGIN;
+     INSERT INTO `user`
+     VALUES (1, 'root', '{noop}123', 1, 1, 1, 1);
+     INSERT INTO `user`
+     VALUES (2, 'admin', '{noop}123', 1, 1, 1, 1);
+     INSERT INTO `user`
+     VALUES (3, 'blr', '{noop}123', 1, 1, 1, 1);
+   COMMIT;
+   -- 插入角色数据
+   BEGIN;
+     INSERT INTO `role`
+     VALUES (1, 'ROLE_product', '商品管理员');
+     INSERT INTO `role`
+     VALUES (2, 'ROLE_admin', '系统管理员');
+     INSERT INTO `role`
+     VALUES (3, 'ROLE_user', '用户管理员');
+   COMMIT;
+   -- 插入用户角色数据
+   BEGIN;
+     INSERT INTO `user_role`
+     VALUES (1, 1, 1);
+     INSERT INTO `user_role`
+     VALUES (2, 1, 2);
+     INSERT INTO `user_role`
+     VALUES (3, 2, 2);
+     INSERT INTO `user_role`
+     VALUES (4, 3, 3);
+   COMMIT;
+   ```
+
+3. 项目中引入依赖
+
+   ```xml
+   <dependency>
+     <groupId>org.mybatis.spring.boot</groupId>
+     <artifactId>mybatis-spring-boot-starter</artifactId>
+     <version>2.2.0</version>
+   </dependency>
+   <dependency>
+     <groupId>mysql</groupId>
+     <artifactId>mysql-connector-java</artifactId>
+     <version>5.1.38</version>
+   </dependency>
+   <dependency>
+     <groupId>com.alibaba</groupId>
+     <artifactId>druid</artifactId>
+     <version>1.2.7</version>
+   </dependency>
+   ```
+
+4. 配置 springboot 配置文件
+
+   ```properties
+   # datasource
+   spring.datasource.type=com.alibaba.druid.pool.DruidDataSource
+   spring.datasource.driver-class-name=com.mysql.jdbc.Driver
+   spring.datasource.url=jdbc:mysql://localhost:3306/security?characterEncoding=UTF-8&useSSL=false
+   spring.datasource.username=root
+   spring.datasource.password=root
+   
+   # mybatis
+   mybatis.mapper-locations=classpath:com/baizhi/mapper/*.xml
+   mybatis.type-aliases-package=com.baizhi.entity
+   
+   # log
+   logging.level.com.baizhi=debug
+   ```
+
+5. 创建 entity
+
+   - 创建 user 对象
+
+     ```java
+     public class User  implements UserDetails {
+         private Integer id;
+         private String username;
+         private String password;
+         private Boolean enabled;
+         private Boolean accountNonExpired;
+         private Boolean accountNonLocked;
+         private Boolean credentialsNonExpired;
+         private List<Role> roles = new ArrayList<>();
+     
+         @Override
+         public Collection<? extends GrantedAuthority> getAuthorities() {
+             List<GrantedAuthority> grantedAuthorities = new ArrayList<>();
+             roles.forEach(role->grantedAuthorities.add(new SimpleGrantedAuthority(role.getName())));
+             return grantedAuthorities;
+         }
+     
+         @Override
+         public String getPassword() {
+             return password;
+         }
+     
+         @Override
+         public String getUsername() {
+             return username;
+         }
+     
+         @Override
+         public boolean isAccountNonExpired() {
+             return accountNonExpired;
+         }
+     
+         @Override
+         public boolean isAccountNonLocked() {
+             return accountNonLocked;
+         }
+     
+         @Override
+         public boolean isCredentialsNonExpired() {
+             return credentialsNonExpired;
+         }
+     
+         @Override
+         public boolean isEnabled() {
+             return enabled;
+         }
+     		//get/set....
+     }
+     ```
+
+   - 创建 role 对象
+
+     ```java
+     public class Role {
+         private Integer id;
+         private String name;
+         private String nameZh;
+       	//get set..
+     }
+     ```
+
+6. 创建 UserDao 接口
+
+   ```java
+   @Mapper
+   public interface UserDao {
+       //根据用户名查询用户
+       User loadUserByUsername(String username);
+     	
+     	//根据用户id查询角色
+     	List<Role> getRolesByUid(Integer uid);
+   }
+   ```
+
+7. 创建 UserMapper 实现
+
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+   <mapper namespace="com.baizhi.dao.UserDao">
+       <!--查询单个-->
+       <select id="loadUserByUsername" resultType="User">
+           select id,
+                  username,
+                  password,
+                  enabled,
+                  accountNonExpired,
+                  accountNonLocked,
+                  credentialsNonExpired
+           from user
+           where username = #{username}
+       </select>
+   
+       <!--查询指定行数据-->
+       <select id="getRolesByUid" resultType="Role">
+           select r.id,
+                  r.name,
+                  r.name_zh nameZh
+           from role r,
+                user_role ur
+           where r.id = ur.rid
+             and ur.uid = #{uid}
+       </select>
+   </mapper>
+   ```
+
+8. 创建 UserDetailService 实例
+
+   ```java
+   @Component
+   public class MyUserDetailService implements UserDetailsService {
+   
+       private  final UserDao userDao;
+   
+       @Autowired
+       public MyUserDetailService(UserDao userDao) {
+           this.userDao = userDao;
+       }
+   
+       @Override
+       public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+           User user = userDao.loadUserByUsername(username);
+           if(ObjectUtils.isEmpty(user))throw new RuntimeException("用户不存在");
+           user.setRoles(userDao.getRolesByUid(user.getId()));
+           return user;
+       }
+   }
+   ```
+
+9. 配置 authenticationManager 使用自定义UserDetailService
+
+   ```java
+   @Configuration
+   public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
+     
+       private final UserDetailsService userDetailsService;
+   
+       @Autowired
+       public WebSecurityConfigurer(UserDetailsService userDetailsService) {
+           this.userDetailsService = userDetailsService;
+       }
+   
+       @Override
+       protected void configure(AuthenticationManagerBuilder builder) throws Exception {
+           builder.userDetailsService(userDetailsService);
+       }
+     
+     	
+     	@Override
+       protected void configure(HttpSecurity http) throws Exception {
+         //web security..
+       }
+   }
+   ```
+
+10. 启动测试即可
