@@ -1308,4 +1308,12 @@ public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
    }
    ```
 
-10. 启动测试即可
+10. 启动测试即可。
+
+# 六、添加验证码验证
+
+## 1、传统Web应用
+
+
+
+## 2、前后端分离Web应用
