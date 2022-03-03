@@ -508,7 +508,7 @@ public Person clone() {
 Person person1 = new Person(new Address("武汉"));
 Person person1Copy = person1.clone();
 // false
-System.out.println(person1.getAddress() == person1Copy.getAddress());Copy to clipboardErrorCopied
+System.out.println(person1.getAddress() == person1Copy.getAddress());
 ```
 
 从输出结构就可以看出，虽然 `person1` 的克隆对象和 `person1` 包含的 `Address` 对象已经是不同的了。
@@ -592,7 +592,7 @@ try {
     if (scanner != null) {
         scanner.close();
     }
-}Copy to clipboardErrorCopied
+}
 ```
 
 使用 Java 7 之后的 `try-with-resources` 语句改造上面的代码:
@@ -604,7 +604,7 @@ try (Scanner scanner = new Scanner(new File("test.txt"))) {
     }
 } catch (FileNotFoundException fnfe) {
     fnfe.printStackTrace();
-}Copy to clipboardErrorCopied
+}
 ```
 
 当然多个资源需要关闭的时候，使用 `try-with-resources` 实现起来也非常简单，如果你还是用`try-catch-finally`可能会带来很多问题。

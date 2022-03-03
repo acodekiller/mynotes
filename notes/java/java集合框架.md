@@ -327,17 +327,23 @@ public class ArrayList<E> extends AbstractList<E>
 可以看到 ArrayList 实现了 Serializable 接口，这意味着 ArrayList 支持序列化。transient 的作用是说不希望 elementData 数组被序列化，重写了 writeObject 实现：
 
 ```java
-private void writeObject(java.io.ObjectOutputStream s) throws java.io.IOException{
-    *// Write out element count, and any hidden stuff*
-        int expectedModCount = modCount;
+private void writeObject(java.io.ObjectOutputStream s)
+    throws java.io.IOException{
+    // Write out element count, and any hidden stuff
+    int expectedModCount = modCount;
     s.defaultWriteObject();
-    *// Write out array length*
-        s.writeInt(elementData.length);
-    *// Write out all elements in the proper order.*
-        for (int i=0; i<size; i++)
-            s.writeObject(elementData[i]);
+
+    // Write out size as capacity for behavioural compatibility with clone()
+    s.writeInt(size);
+
+    // Write out all elements in the proper order.
+    for (int i=0; i<size; i++) {
+        s.writeObject(elementData[i]);
+    }
+
     if (modCount != expectedModCount) {
         throw new ConcurrentModificationException();
+    }
 }
 ```
 
@@ -568,11 +574,10 @@ B的下一个指针指向了A
 
 因为java8之后链表有红黑树的部分，大家可以看到代码已经多了很多if else的逻辑判断了，红黑树的引入巧妙的将原本O(n)的时间复杂度降低到了O(logn)。
 
-Tip：红黑树的知识点同样很重要，还是那句话不打没把握的仗，限于篇幅原因，我就不在这里过多描述了，以后写到数据结构再说吧，不过要面试的仔，还是要准备好，反正我是经常问到的。
-
 使用头插会改变链表的上的顺序，但是如果使用尾插，在扩容时会保持链表元素原本的顺序，就不会出现链表成环的问题了。
 
 就是说原本是A->B，在扩容后那个链表还是A->B
+
 ![img](imgs/006tNbRwly1g9plftqim3j309f04y0sn.jpg)
 
 Java7在多线程操作HashMap时可能引起死循环，原因是扩容转移后前后链表顺序倒置，在转移过程中修改了原来链表中节点的引用关系。
@@ -706,7 +711,7 @@ static final int hash(Object key) {
 
 阈值是8，红黑树转链表阈值为6。
 
-因为根据泊松分布，，在hash函数设计合理的情况下，发生hash碰撞8次的几率为百万分之6，概率说话。因为8够用了，至于为什么转回来是6，因为如果hash碰撞次数在8附近徘徊，会一直发生链表和红黑树的互相转化，为了预防这种情况的发生。
+因为根据泊松分布，在hash函数设计合理的情况下，发生hash碰撞8次的几率为百万分之6，概率说话。因为8够用了，至于为什么转回来是6，因为如果hash碰撞次数在8附近徘徊，会一直发生链表和红黑树的互相转化，为了预防这种情况的发生。
 
 ### 14）为什么HashMap使用红黑树而不使用AVL树
 

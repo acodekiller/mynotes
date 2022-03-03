@@ -1312,8 +1312,572 @@ public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
 
 # 六、添加验证码验证
 
+1. 引入依赖
+
+```xml
+<dependency>
+  <groupId>com.github.penggle</groupId>
+  <artifactId>kaptcha</artifactId>
+  <version>2.3.2</version>
+</dependency>
+```
+
+2. 配置验证码
+
+```java
+@Configuration
+public class KaptchaConfig {
+    @Bean
+    public Producer kaptcha() {
+        Properties properties = new Properties();
+        properties.setProperty("kaptcha.image.width", "150");
+        properties.setProperty("kaptcha.image.height", "50");
+        properties.setProperty("kaptcha.textproducer.char.string", "0123456789");
+        properties.setProperty("kaptcha.textproducer.char.length", "4");
+        Config config = new Config(properties);
+        DefaultKaptcha defaultKaptcha = new DefaultKaptcha();
+        defaultKaptcha.setConfig(config);
+        return defaultKaptcha;
+    }
+}
+```
+
 ## 1、传统Web应用
 
+1. 生成验证码 controller
 
+```java
+@Controller
+public class KaptchaController {
+
+    @Autowired
+    private Producer producer;
+
+    @GetMapping("/vc.jpg")
+    public void getVerifyCode(HttpServletResponse response, HttpSession session) throws IOException{
+        response.setContentType("image/png");
+        String code = producer.createText();
+        session.setAttribute("code",code);
+        BufferedImage bi = producer.createImage(code);
+        ServletOutputStream os = response.getOutputStream();
+        ImageIO.write(bi,"jpg",os);
+    }
+
+}
+```
+
+2. 自定义验证码异常类
+
+```java
+public class KaptchaNotMatchException extends AuthenticationException {
+
+    public KaptchaNotMatchException(String msg) {
+        super(msg);
+    }
+
+    public KaptchaNotMatchException(String msg, Throwable throwable) {
+        super(msg, throwable);
+    }
+
+}
+```
+
+3. 自定义filter验证验证码
+
+```java
+public class KaptchaFilter extends UsernamePasswordAuthenticationFilter {
+
+    public static final String CODE = "code";
+
+    private String code = CODE;
+
+    public String getCode() {
+        return code;
+    }
+
+    public void setCode(String code) {
+        this.code = code;
+    }
+
+    @Override
+    public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response) throws AuthenticationException {
+        //1.判断是否是 post 方式
+        if (!request.getMethod().equals("POST")) {
+            throw new AuthenticationServiceException("Authentication method not supported: " + request.getMethod());
+        }
+         //2.获取验证码
+        String code = request.getParameter(getCode());
+        String sessionCode = (String) request.getSession().getAttribute("code");
+        if (!ObjectUtils.isEmpty(code) && !ObjectUtils.isEmpty(sessionCode) && code.equalsIgnoreCase(sessionCode)) {
+            return super.attemptAuthentication(request, response);
+        }
+        throw new KaptchaNotMatchException("验证码错误！");
+
+    }
+}
+```
+
+4. 放行以及配置验证码 filter
+
+```java
+@Configuration
+public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
+
+    @Bean
+    public UserDetailsService userDetailsService() {
+        InMemoryUserDetailsManager inMemoryUserDetailsManager = new InMemoryUserDetailsManager();
+        inMemoryUserDetailsManager.createUser(User.withUsername("user").password("{noop}123456").roles("admin").build());
+        return inMemoryUserDetailsManager;
+    }
+
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        auth.userDetailsService(userDetailsService());
+    }
+
+    @Override
+    @Bean
+    public AuthenticationManager authenticationManagerBean() throws Exception {
+        return super.authenticationManagerBean();
+    }
+
+    @Bean
+    public KaptchaFilter kaptchaFilter() throws Exception {
+        KaptchaFilter kaptchaFilter = new KaptchaFilter();
+        kaptchaFilter.setCode("code");
+        kaptchaFilter.setAuthenticationManager(authenticationManagerBean());
+        kaptchaFilter.setAuthenticationSuccessHandler((request, response, authentication) -> {
+            Map<String, Object> result = new HashMap<String, Object>();
+            result.put("msg", "登录成功");
+            result.put("status", 200);
+            response.setContentType("application/json;charset=UTF-8");
+            String s = new ObjectMapper().writeValueAsString(result);
+            response.getWriter().println(s);
+        });
+        kaptchaFilter.setAuthenticationFailureHandler((request, response, exception) -> {
+            Map<String, Object> result = new HashMap<String, Object>();
+            result.put("msg", "登录失败: " + exception.getMessage());
+            result.put("status", 500);
+            response.setContentType("application/json;charset=UTF-8");
+            String s = new ObjectMapper().writeValueAsString(result);
+            response.getWriter().println(s);
+        });
+        kaptchaFilter.setFilterProcessesUrl("/doLogin");
+        kaptchaFilter.setUsernameParameter("uname");
+        kaptchaFilter.setPasswordParameter("passwd");
+        return kaptchaFilter;
+    }
+
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.authorizeRequests()
+                .mvcMatchers("/vc.jpg", "/login.html").permitAll()
+                .anyRequest().authenticated()
+                .and()
+                .formLogin()
+                .loginPage("/login.html")
+                .and()
+                .logout()
+                .logoutUrl("/logout")
+                .and().csrf().disable();
+        http.addFilterAt(kaptchaFilter(), UsernamePasswordAuthenticationFilter.class);
+    }
+}
+```
+
+5. 登录页面
+
+```html
+<!DOCTYPE html>
+<html lang="en" xmlns:th="https://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+<form method="post" th:action="@{/doLogin}">
+    用户名:<input name="uname" type="text"/><br>
+    密码:<input name="passwd" type="password"/><br>
+    验证码: <input name="code" type="text"/> <img alt="" th:src="@{/vc.jpg}"><br>
+    <input type="submit" value="登录"/>
+</form>
+</body>
+</html>
+```
 
 ## 2、前后端分离Web应用
+
+1. 生成验证码
+
+```java
+@RestController
+public class KaptchaController {
+    private final Producer producer;
+
+    @Autowired
+    public KaptchaController(Producer producer) {
+        this.producer = producer;
+    }
+
+    @GetMapping("/vc.png")
+    public String getVerifyCode(HttpSession session) throws IOException {
+        //1.生成验证码
+        String code = producer.createText();
+        session.setAttribute("kaptcha", code);//可以更换成 redis 实现
+        BufferedImage bi = producer.createImage(code);
+        //2.写入内存
+        FastByteArrayOutputStream fos = new FastByteArrayOutputStream();
+        ImageIO.write(bi, "png", fos);
+        //3.生成 base64
+        return Base64.encodeBase64String(fos.toByteArray());
+    }
+}
+```
+
+2. 定义验证码异常类
+
+```java
+public class KaptchaNotMatchException extends AuthenticationException {
+
+    public KaptchaNotMatchException(String msg) {
+        super(msg);
+    }
+
+    public KaptchaNotMatchException(String msg, Throwable cause) {
+        super(msg, cause);
+    }
+}
+```
+
+3. 在自定义LoginKaptchaFilter中加入验证码验证
+
+```java
+//自定义 filter
+public class LoginKaptchaFilter extends UsernamePasswordAuthenticationFilter {
+
+    public static final String FORM_KAPTCHA_KEY = "kaptcha";
+
+    private String kaptchaParameter = FORM_KAPTCHA_KEY;
+
+    public String getKaptchaParameter() {
+        return kaptchaParameter;
+    }
+
+    public void setKaptchaParameter(String kaptchaParameter) {
+        this.kaptchaParameter = kaptchaParameter;
+    }
+
+    @Override
+    public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response) throws AuthenticationException {
+        if (!request.getMethod().equals("POST")) {
+            throw new AuthenticationServiceException("Authentication method not supported: " + request.getMethod());
+        }
+        try {
+            //1.获取请求数据
+            Map<String, String> userInfo = new ObjectMapper().readValue(request.getInputStream(), Map.class);
+            String kaptcha = userInfo.get(getKaptchaParameter());//用来获取数据中验证码
+            String username = userInfo.get(getUsernameParameter());//用来接收用户名
+            String password = userInfo.get(getPasswordParameter());//用来接收密码
+            //2.获取 session 中验证码
+            String sessionVerifyCode = (String) request.getSession().getAttribute("kaptcha");
+            if (!ObjectUtils.isEmpty(kaptcha) && !ObjectUtils.isEmpty(sessionVerifyCode) &&
+                    kaptcha.equalsIgnoreCase(sessionVerifyCode)) {
+                //3.获取用户名 和密码认证
+                UsernamePasswordAuthenticationToken authRequest = new UsernamePasswordAuthenticationToken(username, password);
+                setDetails(request, authRequest);
+                return this.getAuthenticationManager().authenticate(authRequest);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        throw new KaptchaNotMatchException("验证码不匹配!");
+    }
+}
+```
+
+4. 配置
+
+```java
+@Configuration
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+
+    @Bean
+    public UserDetailsService userDetailsService() {
+        InMemoryUserDetailsManager inMemoryUserDetailsManager = new InMemoryUserDetailsManager();
+        inMemoryUserDetailsManager.createUser(User.withUsername("root").password("{noop}123").roles("admin").build());
+        return inMemoryUserDetailsManager;
+    }
+
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        auth.userDetailsService(userDetailsService());
+    }
+
+    @Bean
+    @Override
+    public AuthenticationManager authenticationManagerBean() throws Exception {
+        return super.authenticationManagerBean();
+    }
+
+    //配置
+    @Bean
+    public LoginKaptchaFilter loginKaptchaFilter() throws Exception {
+        LoginKaptchaFilter loginKaptchaFilter = new LoginKaptchaFilter();
+        //1.认证 url
+        loginKaptchaFilter.setFilterProcessesUrl("/doLogin");
+        //2.认证 接收参数
+        loginKaptchaFilter.setUsernameParameter("uname");
+        loginKaptchaFilter.setPasswordParameter("passwd");
+        loginKaptchaFilter.setKaptchaParameter("kaptcha");
+        //3.指定认证管理器
+        loginKaptchaFilter.setAuthenticationManager(authenticationManagerBean());
+        //4.指定成功时处理
+        loginKaptchaFilter.setAuthenticationSuccessHandler((req, resp, authentication) -> {
+            Map<String, Object> result = new HashMap<String, Object>();
+            result.put("msg", "登录成功");
+            result.put("用户信息", authentication.getPrincipal());
+            resp.setContentType("application/json;charset=UTF-8");
+            resp.setStatus(HttpStatus.OK.value());
+            String s = new ObjectMapper().writeValueAsString(result);
+            resp.getWriter().println(s);
+        });
+        //5.认证失败处理
+        loginKaptchaFilter.setAuthenticationFailureHandler((req, resp, ex) -> {
+            Map<String, Object> result = new HashMap<String, Object>();
+            result.put("msg", "登录失败: " + ex.getMessage());
+            resp.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
+            resp.setContentType("application/json;charset=UTF-8");
+            String s = new ObjectMapper().writeValueAsString(result);
+            resp.getWriter().println(s);
+        });
+        return loginKaptchaFilter;
+    }
+
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.authorizeRequests()
+                .mvcMatchers("/vc.png").permitAll()
+                .anyRequest().authenticated()
+                .and()
+                .formLogin()
+                .and()
+                .exceptionHandling()
+                .authenticationEntryPoint((req, resp, ex) -> {
+                    resp.setContentType("application/json;charset=UTF-8");
+                    resp.setStatus(HttpStatus.UNAUTHORIZED.value());
+                    resp.getWriter().println("必须认证之后才能访问!");
+                })
+                .and()
+                .logout()
+                .and()
+                .csrf().disable();
+
+        http.addFilterAt(loginKaptchaFilter(), UsernamePasswordAuthenticationFilter.class);
+    }
+
+}
+```
+
+# 七、密码加密
+
+## 1、加密意义
+
+2011 年12月21 日，有人在网络上公开了一个包含600万个 CSDN 用户资料的数据库，数据全部为明文储存，包含用户名、密码以及注册邮箱。事件发生后 CSDN 在微博、官方网站等渠道发出了声明，解释说此数据库系2009 年备份所用，因不明原因泄漏，已经向警方报
+案，后又在官网发出了公开道歉信。在接下来的十多天里，金山、网易、京东、当当、新浪等多家公司被卷入到这次事件中。整个事件中最触目惊心的莫过于 CSDN 把用户密码明文存储，由于很多用户是多个网站共用一个密码，因此一个网站密码泄漏就会造成很大的安全隐患。由于有了这么多前车之鉴，我们现在做系统时，密码都要加密处理。
+
+在前面的案例中，凡是涉及密码的地方，我们都采用明文存储，在实际项目中这肯定是不可取的，因为这会带来极高的安全风险。在企业级应用中，密码不仅需要加密，还需要加`盐`，最大程度地保证密码安全。
+
+## 2、常见方案
+
+### 1）Hash算法
+
+​		最早我们使用类似 SHA-256 、SHA-512 、MD5等这样的单向 Hash 算法。用户注册成功后，保存在数据库中不再是用户的明文密码，而是经过 SHA-256 加密计算的一个字行串，当用户进行登录时，用户输入的明文密码用 SHA-256 进行加密，加密完成之后，再和存储在数据库中的密码进行比对，进而确定用户登录信息是否有效。如果系统遭遇攻击，最多也只是存储在数据库中的密文被泄漏。
+
+​		这样就绝对安全了吗？由于[彩虹表](https://baike.baidu.com/item/%E5%BD%A9%E8%99%B9%E8%A1%A8/689313?fr=aladdin)这种攻击方式的存在以及随着计算机硬件的发展，每秒执行数十亿次 HASH计算己经变得轻轻松松，这意味着即使给密码加密加盐也不再安全。
+
+### 2）单向自适应函数
+
+在Spring Security 中，我们现在是用一种自适应单向函数 (Adaptive One-way Functions)来处理密码问题，这种自适应单向函数在进行密码匹配时，会有**意占用大量系统资源**（例如CPU、内存等），这样可以增加恶意用户攻击系统的难度。在Spring Securiy 中，开发者可以通过 bcrypt、PBKDF2、sCrypt 以及 argon2 来体验这种自适应单向函数加密。由于自适应单向函数有意占用大量系统资源，因此每个登录认证请求都会大大降低应用程序的性能，但是 Spring Secuity 不会采取任何措施来提高密码验证速度，因为它正是通过这种方式来增强系统的安全性。
+
+- **BCryptPasswordEncoder**
+
+  BCryptPasswordEncoder 使用 bcrypt 算法对密码进行加密，为了提高密码的安全性，bcrypt算法故意降低运行速度，以增强密码破解的难度。同时 BCryptP asswordEncoder “为自己带盐”开发者不需要额外维护一个“盐” 字段，使用 BCryptPasswordEncoder 加密后的字符串就已经“带盐”了，即使相同的明文每次生成的加密字符串都不相同。
+
+- **Argon2PasswordEncoder**
+
+  Argon2PasswordEncoder 使用 Argon2 算法对密码进行加密，Argon2 曾在 Password Hashing Competition 竞赛中获胜。为了解决在定制硬件上密码容易被破解的问题，Argon2也是故意降低运算速度，同时需要大量内存，以确保系统的安全性。
+
+- **Pbkdf2PasswordEncoder**
+
+  Pbkdf2PasswordEncoder 使用 PBKDF2 算法对密码进行加密，和前面几种类似，PBKDF2
+
+  算法也是一种故意降低运算速度的算法，当需要 FIPS (Federal Information Processing Standard,美国联邦信息处理标准）认证时，PBKDF2 算法是一个很好的选择。
+
+- **SCryptPasswordEncoder**
+
+  SCryptPasswordEncoder 使用scrypt 算法对密码进行加密，和前面的几种类似，serypt 也是一种故意降低运算速度的算法，而且需要大量内存。
+
+## 3、PasswordEncode
+
+通过对认证流程源码分析得知，实际密码比较是由PasswordEncoder完成的，因此只需要使用PasswordEncoder 不同实现就可以实现不同方式加密。
+
+```java
+public interface PasswordEncoder {
+    
+	String encode(CharSequence rawPassword);
+    
+	boolean matches(CharSequence rawPassword, String encodedPassword);
+    
+	default boolean upgradeEncoding(String encodedPassword) {
+		return false;
+	}
+}
+```
+
+- encode 用来进行明文加密的
+- matches 用来比较密码的方法
+- upgradeEncoding 用来给密码进行升级的方法
+
+默认提供加密算法如下：
+
+![image-20220127162622771](imgs/image-20220127162622771.png)
+
+## 4、DelegatingPasswordEncoder
+
+根据上面 PasswordEncoder的介绍，可能会以为 Spring security 中默认的密码加密方案应该是四种自适应单向加密函数中的一种，其实不然，在 spring Security 5.0之后，默认的密码加密方案其实是 DelegatingPasswordEncoder。从名字上来看，DelegatingPaswordEncoder 是一个代理类，而并非一种全新的密码加密方案，DeleggtinePasswordEncoder 主要用来代理上面介绍的不同的密码加密方案。为什么采DelegatingPasswordEncoder 而不是某一个具体加密方式作为默认的密码加密方案呢？主要考虑了如下两方面的因素：
+
+- 兼容性：使用 DelegatingPasswrordEncoder 可以帮助许多使用旧密码加密方式的系统顺利迁移到 Spring security 中，它允许在同一个系统中同时存在多种不同的密码加密方案。
+
+- 便捷性：密码存储的最佳方案不可能一直不变，如果使用 DelegatingPasswordEncoder作为默认的密码加密方案，当需要修改加密方案时，只需要修改很小一部分代码就可以实现。
+
+### 1）DelegatingPasswordEncoder源码
+
+```java
+public class DelegatingPasswordEncoder implements PasswordEncoder {
+  ....
+}
+```
+
+- encode 用来进行明文加密的
+- matches 用来比较密码的方法
+- upgradeEncoding 用来给密码进行升级的方法
+
+### 2）PasswordEncoderFactories源码
+
+```java
+public class PasswordEncoderFactories {
+	@SuppressWarnings("deprecation")
+	public static PasswordEncoder createDelegatingPasswordEncoder() {
+		String encodingId = "bcrypt";
+		Map<String, PasswordEncoder> encoders = new HashMap<>();
+		encoders.put(encodingId, new BCryptPasswordEncoder());
+		encoders.put("ldap", new org.springframework.security.crypto.password.LdapShaPasswordEncoder());
+		encoders.put("MD4", new org.springframework.security.crypto.password.Md4PasswordEncoder());
+		encoders.put("MD5", new org.springframework.security.crypto.password.MessageDigestPasswordEncoder("MD5"));
+		encoders.put("noop", org.springframework.security.crypto.password.NoOpPasswordEncoder.getInstance());
+		encoders.put("pbkdf2", new Pbkdf2PasswordEncoder());
+		encoders.put("scrypt", new SCryptPasswordEncoder());
+		encoders.put("SHA-1", new org.springframework.security.crypto.password.MessageDigestPasswordEncoder("SHA-1"));
+		encoders.put("SHA-256", new org.springframework.security.crypto.password.MessageDigestPasswordEncoder("SHA-256"));
+		encoders.put("sha256", new org.springframework.security.crypto.password.StandardPasswordEncoder());
+		encoders.put("argon2", new Argon2PasswordEncoder());
+
+		return new DelegatingPasswordEncoder(encodingId, encoders);
+	}
+
+	private PasswordEncoderFactories() {}
+}
+```
+
+## 5、如何使用PasswordEncoder
+
+- 查看WebSecurityConfigurerAdapter类中源码
+
+```java
+static class LazyPasswordEncoder implements PasswordEncoder {
+    private ApplicationContext applicationContext;
+    private PasswordEncoder passwordEncoder;
+
+    LazyPasswordEncoder(ApplicationContext applicationContext) {
+        this.applicationContext = applicationContext;
+    }
+
+    @Override
+    public String encode(CharSequence rawPassword) {
+        return getPasswordEncoder().encode(rawPassword);
+    }
+
+    @Override
+    public boolean matches(CharSequence rawPassword,
+                           String encodedPassword) {
+        return getPasswordEncoder().matches(rawPassword, encodedPassword);
+    }
+
+    @Override
+    public boolean upgradeEncoding(String encodedPassword) {
+        return getPasswordEncoder().upgradeEncoding(encodedPassword);
+    }
+
+    private PasswordEncoder getPasswordEncoder() {
+        if (this.passwordEncoder != null) {
+            return this.passwordEncoder;
+        }
+        PasswordEncoder passwordEncoder = getBeanOrNull(PasswordEncoder.class);
+        if (passwordEncoder == null) {
+            passwordEncoder = PasswordEncoderFactories.createDelegatingPasswordEncoder();
+        }
+        this.passwordEncoder = passwordEncoder;
+        return passwordEncoder;
+    }
+
+    private <T> T getBeanOrNull(Class<T> type) {
+        try {
+            return this.applicationContext.getBean(type);
+        } catch(NoSuchBeanDefinitionException notFound) {
+            return null;
+        }
+    }
+
+    @Override
+    public String toString() {
+        return getPasswordEncoder().toString();
+    }
+}
+```
+
+通过源码分析得知如果在工厂中指定了PasswordEncoder，就会使用指定PasswordEncoder，否则就会使用默认DelegatingPasswordEncoder。
+
+## 6、实战
+
+### 1）固定加密方案
+
+```java
+@Configuration
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+     @Bean
+     public PasswordEncoder BcryptPasswordEncoder() {
+         return new BCryptPasswordEncoder();
+     }
+  	 @Bean
+    public UserDetailsService userDetailsService() {
+        InMemoryUserDetailsManager inMemoryUserDetailsManager = new InMemoryUserDetailsManager();
+        inMemoryUserDetailsManager.createUser(User.withUsername("root").password("$2a$10$WGFkRsZC0kzafTKOPcWONeLvNvg2jqd3U09qd5gjJGSHE5b0yoy6a").roles("xxx").build());
+        return inMemoryUserDetailsManager;
+    }
+}
+```
+
+### 2）灵活加密方案
+
+```java
+@Configuration
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+  	 @Bean
+    public UserDetailsService userDetailsService() {
+        InMemoryUserDetailsManager inMemoryUserDetailsManager = new InMemoryUserDetailsManager();
+        inMemoryUserDetailsManager.createUser(User.withUsername("root").password("{bcrypt}$2a$10$WGFkRsZC0kzafTKOPcWONeLvNvg2jqd3U09qd5gjJGSHE5b0yoy6a").roles("xxx").build());
+        return inMemoryUserDetailsManager;
+    }
+}
+```
+

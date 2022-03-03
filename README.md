@@ -25,6 +25,7 @@
 - [动态规划](notes/algorithm/动态规划)
 - [单调栈](notes/algorithm/单调栈)
 - [图论](notes/algorithm/图论)
+- [企业题库](notes/algorithm/企业题库)
 
 ## 🧾数据库/中间件
 
@@ -57,7 +58,7 @@
 ## 🙌其它
 
 - [Docker](notes/other/Docker)
-- [分布式理论](notes/other/分布式理论知识)
+- [企业题库]()
 - [笔试前必看](notes/other/笔试前必看)
 
 ## 🚩持续更新中…
