@@ -286,10 +286,18 @@ Mybatis使用RowBounds对象进行分页，它是针对ResultSet结果集执行�
 
 # <font color=green>6、缓存</font>
 
-## <font color=blue>Mybatis的一级、二级缓存</font>
+## <font color=blue>1）Mybatis的一级、二级缓存</font>
 
 1）一级缓存: 基于 PerpetualCache 的 HashMap 本地缓存，其存储作用域为 Session，当 Session flush 或 close 之后，该 Session 中的所有 Cache 就将清空，默认打开一级缓存。
 
 2）二级缓存与一级缓存其机制相同，默认也是采用 PerpetualCache，HashMap 存储，不同在于其存储作用域为 Mapper(Namespace)，并且可自定义存储源，如 Ehcache。默认不打开二级缓存，要开启二级缓存，使用二级缓存属性类需要实现Serializable序列化接口(可用来保存对象的状态),可在它的映射文件中配置<cache/> ；
 
 3）对于缓存数据更新机制，当某一个作用域(一级缓存 Session/二级缓存Namespaces)的进行了C/U/D 操作后，默认该作用域下所有 select 中的缓存将被 clear。
+
+## <font color=blue>2）为什么MyBatis有二级缓存，还要用redis</font>
+
+- Mybatis一级缓存作用域是session，session commit之后缓存就失效了；
+- Mybatis二级缓存作用域是sessionfactory，该缓存是以namespace为单位的（也就是一个xxxmapper.xml文件），不同namespace下的操作互不影响；
+- 所有对数据表的改变操作都会刷新缓存，但是一般不要用二级缓存，因为：如果在UserMapper.xml中有大多数针对user单表的操作，但是另一个xxxMapper.xml也有对user单表的操作的话，这会导致user在两个命名空间不一致。
+- 而Redis是中央缓存数据库，不仅不会出现以上问题，还可以保证微服务架构下所有服务使用统一的缓存数据。
+
