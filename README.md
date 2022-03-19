@@ -20,7 +20,9 @@
 
 ## ✏️算法
 
+- [二叉树](notes/algorithm/二叉树)
 - [并查集](notes/algorithm/并查集)
+- [贪心算法](notes/algorithm/贪心算法)
 - [回溯算法](notes/algorithm/回溯算法)
 - [动态规划](notes/algorithm/动态规划)
 - [单调栈](notes/algorithm/单调栈)
