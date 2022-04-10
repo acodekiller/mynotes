@@ -1881,3 +1881,348 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 }
 ```
 
+## 7、密码自动加密实战
+
+推荐使用DelegatingPasswordEncoder 的另外一个好处就是自动进行密码加密方案的升级，这个功能在整合一些老的系统时非常有用。
+
+方法：让我们自定义的MyUserDetailService除了实现UserDetailsService接口外，并且实现UserDetailsPasswordService，重写其中的方法`updatePassword`来实现密码的自动升级。
+
+1. 准备库
+
+```sql
+-- 用户表
+CREATE TABLE `user`
+(
+    `id`                    int(11) NOT NULL AUTO_INCREMENT,
+    `username`              varchar(32)  DEFAULT NULL,
+    `password`              varchar(255) DEFAULT NULL,
+    `enabled`               tinyint(1) DEFAULT NULL,
+    `accountNonExpired`     tinyint(1) DEFAULT NULL,
+    `accountNonLocked`      tinyint(1) DEFAULT NULL,
+    `credentialsNonExpired` tinyint(1) DEFAULT NULL,
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8;
+-- 角色表
+CREATE TABLE `role`
+(
+    `id`      int(11) NOT NULL AUTO_INCREMENT,
+    `name`    varchar(32) DEFAULT NULL,
+    `name_zh` varchar(32) DEFAULT NULL,
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8;
+-- 用户角色关系表
+CREATE TABLE `user_role`
+(
+    `id`  int(11) NOT NULL AUTO_INCREMENT,
+    `uid` int(11) DEFAULT NULL,
+    `rid` int(11) DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    KEY   `uid` (`uid`),
+    KEY   `rid` (`rid`)
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8;
+```
+
+2. 插入数据
+
+```sql
+-- 插入用户数据
+BEGIN;
+  INSERT INTO `user`
+  VALUES (1, 'root', '{noop}123', 1, 1, 1, 1);
+  INSERT INTO `user`
+  VALUES (2, 'admin', '{noop}123', 1, 1, 1, 1);
+  INSERT INTO `user`
+  VALUES (3, 'blr', '{noop}123', 1, 1, 1, 1);
+COMMIT;
+-- 插入角色数据
+BEGIN;
+  INSERT INTO `role`
+  VALUES (1, 'ROLE_product', '商品管理员');
+  INSERT INTO `role`
+  VALUES (2, 'ROLE_admin', '系统管理员');
+  INSERT INTO `role`
+  VALUES (3, 'ROLE_user', '用户管理员');
+COMMIT;
+-- 插入用户角色数据
+BEGIN;
+  INSERT INTO `user_role`
+  VALUES (1, 1, 1);
+  INSERT INTO `user_role`
+  VALUES (2, 1, 2);
+  INSERT INTO `user_role`
+  VALUES (3, 2, 2);
+  INSERT INTO `user_role`
+  VALUES (4, 3, 3);
+COMMIT;
+```
+
+3. 整合MyBatis
+
+```xml
+<dependency>
+    <groupId>mysql</groupId>
+    <artifactId>mysql-connector-java</artifactId>
+    <version>5.1.38</version>
+</dependency>
+
+<dependency>
+  <groupId>org.mybatis.spring.boot</groupId>
+  <artifactId>mybatis-spring-boot-starter</artifactId>
+  <version>2.2.0</version>
+</dependency>
+
+<dependency>
+  <groupId>com.alibaba</groupId>
+  <artifactId>druid</artifactId>
+  <version>1.2.8</version>
+</dependency>
+```
+
+4. 配置application文件
+
+```properties
+spring.datasource.type=com.alibaba.druid.pool.DruidDataSource
+spring.datasource.driver-class-name=com.mysql.jdbc.Driver
+spring.datasource.url=jdbc:mysql://localhost:3306/security?characterEncoding=UTF-8&serverTimezone=UTC&useSSL=false
+spring.datasource.username=root
+spring.datasource.password=root
+mybatis.mapper-locations=classpath:/mapper/*.xml
+mybatis.type-aliases-package=com.baizhi.entity
+logging.level.com.baizhi.dao=debug
+```
+
+5. 编写实体类User
+
+```java
+public class User implements UserDetails {
+    private Integer id;
+    private String username;
+    private String password;
+    private Boolean enabled;
+    private Boolean accountNonExpired;
+    private Boolean accountNonLocked;
+    private Boolean credentialsNonExpired;
+    private List<Role> roles = new ArrayList<>();
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+        for (Role role : roles) {
+            authorities.add(new SimpleGrantedAuthority(role.getName()));
+        }
+        return authorities;
+    }
+
+    @Override
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    @Override
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return accountNonExpired;
+    }
+
+    public void setAccountNonExpired(Boolean accountNonExpired) {
+        this.accountNonExpired = accountNonExpired;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return accountNonLocked;
+    }
+
+    public void setAccountNonLocked(Boolean accountNonLocked) {
+        this.accountNonLocked = accountNonLocked;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return credentialsNonExpired;
+    }
+
+    public void setCredentialsNonExpired(Boolean credentialsNonExpired) {
+        this.credentialsNonExpired = credentialsNonExpired;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(Boolean enabled) {
+        this.enabled = enabled;
+    }
+
+    public void setRoles(List<Role> roles) {
+        this.roles = roles;
+    }
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+}
+```
+
+6. 编写实体类Role
+
+```java
+public class Role {
+    private Integer id;
+    private String name;
+    private String nameZh;
+
+    public Integer getId() {
+        return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getNameZh() {
+        return nameZh;
+    }
+
+    public void setNameZh(String nameZh) {
+        this.nameZh = nameZh;
+    }
+}
+```
+
+7. 创建dao
+
+```java
+@Mapper
+public interface UserDao {
+    List<Role> getRolesByUid(Integer uid);
+    User loadUserByUsername(String username);
+  	Integer updatePassword(@Param("username") String username,@Param("password") String password);
+}
+```
+
+8. 编写mapper
+
+```xml
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.baizhi.dao.UserDao">
+
+
+    <select id="loadUserByUsername" resultType="User">
+        select id,
+               username,
+               password,
+               enabled,
+               accountNonExpired,
+               accountNonLocked,
+               credentialsNonExpired
+        from `user`
+        where username = #{username}
+    </select>
+
+
+    <select id="getRolesByUid" resultType="Role">
+        select r.id,
+               r.name,
+               r.name_zh nameZh
+        from `role` r,
+             `user_role` ur
+        where r.id = ur.rid
+          and ur.uid = #{uid}
+    </select>
+  
+  	<update id="updatePassword">
+      update `user` set password=#{password}
+      where username=#{username}
+  	</update>
+
+</mapper>
+```
+
+9. 编写service实现
+
+```java
+@Service
+public class MyUserDetailService implements UserDetailsService,UserDetailsPasswordService {
+    private final UserDao userDao;
+
+    @Autowired
+    public MyUserDetailService(UserDao userDao) {
+        this.userDao = userDao;
+    }
+
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        User user = userDao.loadUserByUsername(username);
+        if (ObjectUtils.isEmpty(user)) {
+            throw new RuntimeException("用户不存在!");
+        }
+        user.setRoles(userDao.getRolesByUid(user.getId()));
+        return user;
+    }
+  
+  	 @Override
+    public UserDetails updatePassword(UserDetails user, String newPassword) {
+        Integer result = userDao.updatePassword(user.getUsername(), newPassword);
+        if (result == 1) {
+            ((User) user).setPassword(newPassword);
+        }
+        return user;
+    }
+}
+```
+
+10. 配置securityconfig
+
+```java
+@Configuration
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+
+
+    private final MyUserDetailService myUserDetailService;
+
+    @Autowired
+    public SecurityConfig(MyUserDetailService myUserDetailService) {
+        this.myUserDetailService = myUserDetailService;
+    }
+      @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        //查询数据库
+        auth.userDetailsService(myUserDetailService);
+    }
+
+}
+```
+
+11. 启动项目测试。
+
+
+
+# 八、RememberMe
+

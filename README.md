@@ -20,6 +20,7 @@
 
 ## ✏️算法
 
+- [链表](notes/algorithm/链表)
 - [二叉树](notes/algorithm/二叉树)
 - [并查集](notes/algorithm/并查集)
 - [贪心算法](notes/algorithm/贪心算法)
