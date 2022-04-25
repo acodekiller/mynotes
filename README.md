@@ -58,6 +58,10 @@
 - [后端](notes/practice/后端)
 - [运维](notes/practice/运维)
 
+## 📙读书笔记
+
+- [MySQL技术内幕](notes/books/MySQL技术内幕)
+
 ## 🙌其它
 
 - [Docker](notes/other/Docker)
