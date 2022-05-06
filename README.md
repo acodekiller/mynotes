@@ -21,6 +21,7 @@
 ## ✏️算法
 
 - [链表](notes/algorithm/链表)
+- [滑动窗口](notes/algorithm/滑动窗口)
 - [二叉树](notes/algorithm/二叉树)
 - [并查集](notes/algorithm/并查集)
 - [贪心算法](notes/algorithm/贪心算法)
@@ -39,6 +40,7 @@
 
 ## 💡常用框架
 
+- [Servlet](notes/framework/Servlet)
 - [Spring](notes/framework/Spring)
 - [Spring Security](notes/framework/SpringSecurity)
 - [Spring MVC](notes/framework/SpringMVC)
