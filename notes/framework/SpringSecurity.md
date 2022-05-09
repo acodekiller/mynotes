@@ -22,9 +22,9 @@
 - 开发者自定义：也有很多公司选择自定义权限，即自己开发权限管理。但是一个系统的安全，不仅仅是登录和权限控制这么简单，我们还要考虑种各样可能存在的网络政击以及防彻策略，从这个角度来说，开发者白己实现安全管理也并非是一件容易的事情，只有大公司才有足够的人力物力去支持这件事情。
 - Spring Security：Spring Security，作为spring 家族的一员，在和 Spring 家族的其他成员如 Spring Boot Spring Clond等进行整合时，具有其他框架无可比拟的优势，同时对 OAuth2 有着良好的支持，再加上Spring Cloud对 Spring Security的不断加持（如推出 Spring Cloud Security )，让 Spring Securiy 不知不觉中成为微服务项目的首选安全管理方案。
 
+
+
 ---
-
-
 
 # 二、Spring Security
 
@@ -345,6 +345,10 @@ spring.security.user.roles=admin,users
 - **UserDetailService** 用来修改默认认证的数据源信息
 
 ![image-20220112150929998](imgs/image-20220112150929998.png)
+
+
+
+---
 
 # 三、自定义认证
 
@@ -747,6 +751,10 @@ public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
 
 ![image-20220113114133687](imgs/image-20220113114133687.png)
 
+
+
+---
+
 # 四、登录用户数据获取
 
 ## 1、SpringContextHolder
@@ -895,6 +903,10 @@ xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
   <li sec:authentication="principal.credentialsNonExpired"></li>
 </ul>
 ```
+
+
+
+---
 
 # 五、自定义数据源
 
@@ -1310,6 +1322,10 @@ public class WebSecurityConfigurer extends WebSecurityConfigurerAdapter {
 
 10. 启动测试即可。
 
+
+
+---
+
 # 六、添加验证码验证
 
 1. 引入依赖
@@ -1677,6 +1693,10 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
 }
 ```
+
+
+
+---
 
 # 七、密码加密
 
@@ -2223,6 +2243,8 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 11. 启动项目测试。
 
 
+
+---
 
 # 八、RememberMe
 
@@ -2903,5 +2925,299 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
 4. 测试
 
+
+
+---
+
 # 十、CSRF漏洞保护
+
+## 1、简介
+
+CSRF (Cross-Site Request Forgery 跨站请求伪造)，也可一键式攻击 (one-click-attack），通常缩写为 CSRF 或者 XSRF。
+
+CSRF 攻击是一种挟持用户在当前已登录的浏览器上发送恶意请求的攻击方法。相对于XSS利用用户对指定网站的信任，CSRF则是利用网站对用户网页浏览器的信任。简单来说，CSRF是致击者通过一些技术手段欺骗用户的浏览器，去访问一个用户曾经认证过的网站并执行恶意请求，例如发送邮件、发消息、甚至财产操作 (如转账和购买商品）。由于客户端(浏览器)已经在该网站上认证过，所以该网站会认为是真正用户在操作而执行请求（实际上这个并非用户的本意）。
+
+**例子：**
+
+假设 blr 现在登录了某银行的网站准备完成一项转账操作，转账的链接如下：
+
+**https: //bank .xxx .com/withdraw?account=blr&amount=1000&for=zhangsan**
+
+可以看到，这个链接是想从 blr 这个账户下转账 1000 元到 zhangsan 账户下，假设blr 没有注销登录该银行的网站，就在同一个浏览器新的选项卡中打开了一个危险网站，这个危险网站中有一幅图片，代码如下：
+
+```html
+<img src="https ://bank.xxx.com/withdraw?account=blr&amount=1000&for=1isi">
+```
+
+一旦用户打开了这个网站，这个图片链接中的请求就会自动发送出去。由于是同一个浏览器并且用户尚未注销登录，所以该请求会自动携带上对应的有效的 Cookie 信息，进而完成一次转账操作。这就是跨站请求伪造。
+
+## 2、CSRF防御
+
+**CSRF**攻击的根源在于浏览器默认的身份验证机制(自动携带当前网站的Cookie信息)，这种机制虽然可以保证请求时来自用户的某个浏览器，但是无法确保这请求是用户授权发送。攻击者和用户发送的请求一模一样，这意味着我们没有办法去直接拒绝这里的某一个请求。如果能在合法请求中额外携带一个攻击者无法获取的參数，就可以成功区分出两种不同的请求，进而直接拒绝掉恶意请求。在 SpringSecurity 中就提供了这种机制来防御 CSRF 攻击，这种机制我们称之为**令牌同步模式**。
+
+这是目前主流的 CSRF 攻击防御方案。具体的操作方式就是在每一个 HTTP 请求中，除了默认自动携带的 Cookie 参数之外，再提供一个安全的、随机生成的字符串，我们称之为 CSRF 令牌。这个 CSRF 令牌由服务端生成，生成后在 HttpSession 中保存一份。当前端请求到达后，将请求携带的 CSRF 令牌信息和服务端中保存的令牌进行对比，如果两者不相等，则拒绝掉该 HTTP 请求。
+
+源码可查看`CsrfFilter.class`。
+
+> **注意:** 
+>
+> 考虑到会有一些外部站点链接到我们的网站，所以我们要求请求是幂等的，这样对子HEAD、OPTIONS、TRACE 等方法就没有必要使用 CSRF 令牌了，强行使用可能会导致令牌泄露！
+
+**开启CSRF防御**
+
+```java
+@Configuration
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.
+          ...
+          formLogin()
+          .and()
+          .csrf(); //开启 csrf
+    }
+}
+```
+
+**查看登录页面源码**
+
+![image-20220508191617724](imgs/image-20220508191617724.png)
+
+## 3、传统项目
+
+1. 导入依赖
+
+```xml
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-security</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-thymeleaf</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-web</artifactId>
+</dependency>
+<dependency>
+    <groupId>org.thymeleaf.extras</groupId>
+    <artifactId>thymeleaf-extras-springsecurity5</artifactId>
+</dependency>
+```
+
+2. 配置SpringSecurity
+
+```java
+@Configuration
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+
+    @Bean
+    public UserDetailsService userDetailsService() {
+        InMemoryUserDetailsManager inMemoryUserDetailsManager = new InMemoryUserDetailsManager();
+        inMemoryUserDetailsManager.createUser(User.withUsername("root").password("{noop}123456").roles("admin").build());
+        return inMemoryUserDetailsManager;
+    }
+
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        auth.userDetailsService(userDetailsService());
+    }
+
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.authorizeRequests()
+                .anyRequest().authenticated()
+                .and()
+                .formLogin()
+                .and()
+                .csrf();
+
+    }
+}
+```
+
+3. 配置application文件
+
+```properties
+spring.thymeleaf.cache=false
+spring.thymeleaf.mode=HTML
+spring.thymeleaf.encoding=UTF-8
+spring.thymeleaf.prefix=classpath:/templates/
+spring.thymeleaf.suffix=.html
+```
+
+4. 编写页面
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>测试开启 CSRF</title>
+</head>
+<body>
+
+<h1>主页</h1>
+    <form method="post" th:action="@{/hello}">
+        信息: <input name="name" type="text"> <br>
+        <input type="submit" value="提交">
+    </form>
+</body>
+</html>
+```
+
+5. 编写Controller
+
+```java
+@Controller
+public class HelloController {
+
+    @PostMapping("/hello")
+    @ResponseBody
+    public String hello() {
+        System.out.println("hello ok!");
+        return "Hello ok";
+    }
+
+    @GetMapping("/index")
+    public String index() {
+        return "index";
+    }
+
+}
+```
+
+6. 模拟恶意网站：
+
+```html
+<form action="http://loacal:8080/index" method="post">
+    <input name="name" type="hidden" value="blr"/>
+    <input name="money" type="hidden" value="10000">
+    <input type="submit" value="点我">
+</form>
+```
+
+当恶意网站想要调用我们的`/index`接口时，由于没有`_csrf`令牌，将调用失败。
+
+## 4、前后端分离项目
+
+1. 编写Filter.class
+
+```java
+/**
+ * 自定义前后端分离认证 Filter
+ */
+public class LoginFilter extends UsernamePasswordAuthenticationFilter {
+
+    @Override
+    public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response) throws AuthenticationException {
+        System.out.println("========================================");
+        //1.判断是否是 post 方式请求
+        if (!request.getMethod().equals("POST")) {
+            throw new AuthenticationServiceException("Authentication method not supported: " + request.getMethod());
+        }
+        //2.判断是否是 json 格式请求类型
+        if (request.getContentType().equalsIgnoreCase(MediaType.APPLICATION_JSON_VALUE)) {
+            //3.从 json 数据中获取用户输入用户名和密码进行认证 {"uname":"xxx","password":"xxx"}
+            try {
+                Map<String, String> userInfo = new ObjectMapper().readValue(request.getInputStream(), Map.class);
+                String username = userInfo.get(getUsernameParameter());
+                String password = userInfo.get(getPasswordParameter());
+                System.out.println("用户名: " + username + " 密码: " + password);
+                UsernamePasswordAuthenticationToken authRequest = new UsernamePasswordAuthenticationToken(username, password);
+                setDetails(request, authRequest);
+                return this.getAuthenticationManager().authenticate(authRequest);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return super.attemptAuthentication(request, response);
+    }
+}
+```
+
+2. 配置SpringSecurity
+
+```java
+@Configuration
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+
+    @Bean
+    public UserDetailsService userDetailsService() {
+        InMemoryUserDetailsManager inMemoryUserDetailsManager = new InMemoryUserDetailsManager();
+        inMemoryUserDetailsManager.createUser(User.withUsername("root").password("{noop}123456").roles("admin").build());
+        return inMemoryUserDetailsManager;
+    }
+
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        auth.userDetailsService(userDetailsService());
+    }
+
+    @Override
+    @Bean
+    public AuthenticationManager authenticationManagerBean() throws Exception {
+        return super.authenticationManagerBean();
+    }
+
+    //自定义 filter 交给工厂管理
+    @Bean
+    public LoginFilter loginFilter() throws Exception {
+        LoginFilter loginFilter = new LoginFilter();
+        loginFilter.setFilterProcessesUrl("/doLogin");//指定认证 url
+        loginFilter.setAuthenticationManager(authenticationManagerBean());
+        //认证成功处理
+        loginFilter.setAuthenticationSuccessHandler((req, resp, authentication) -> {
+            Map<String, Object> result = new HashMap<String, Object>();
+            result.put("msg", "登录成功");
+            result.put("用户信息", authentication.getPrincipal());
+            resp.setContentType("application/json;charset=UTF-8");
+            resp.setStatus(HttpStatus.OK.value());
+            String s = new ObjectMapper().writeValueAsString(result);
+            resp.getWriter().println(s);
+        });
+        //认证失败处理
+        loginFilter.setAuthenticationFailureHandler((req, resp, ex) -> {
+            Map<String, Object> result = new HashMap<String, Object>();
+            result.put("msg", "登录失败: " + ex.getMessage());
+            resp.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
+            resp.setContentType("application/json;charset=UTF-8");
+            String s = new ObjectMapper().writeValueAsString(result);
+            resp.getWriter().println(s);
+        });
+        return loginFilter;
+    }
+
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.authorizeRequests().anyRequest().authenticated()
+                .and()
+                .formLogin()
+                //.and().csrf().disable();
+                .and()
+                .csrf()
+                .csrfTokenRepository(cookieCsrfTokenRepository());
+        http.addFilterAt(loginFilter(), UsernamePasswordAuthenticationFilter.class);
+    }
+
+    @Bean
+    public CookieCsrfTokenRepository cookieCsrfTokenRepository() {
+        CookieCsrfTokenRepository repository = new CookieCsrfTokenRepository();
+        repository.setHeaderName("_MY_XSRF");   //修改令牌名
+        repository.setCookieHttpOnly(false);    //将令牌保存到 cookie 中 允许 cookie 前端获取
+        return repository;
+    }
+}
+```
+
+3. 测试
+
+![image-20220508211844202](imgs/image-20220508211844202.png)
+
+
+
+前端系统在每次访问时需要先获取到`XSRF-TOKEN`中的值，并放入到请求头中：
+
+![image-20220508214605263](imgs/image-20220508214605263.png)
 

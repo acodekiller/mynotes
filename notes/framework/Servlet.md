@@ -4,7 +4,7 @@
 
 1、Servlet规范来自于Java EE规范中的一种
 
-2、作用：
+2、**作用：**
 
 1. 在Servlet规范中，指定【动态资源文件】（Servlet开发步骤）
 2. 在Servlet规范中，指定Http服务器调用动态资源文件规则（Servlet资源映射关系）
@@ -91,6 +91,8 @@ public class OneServlet extends HttpServlet {
 4. 在Http服务器关闭时刻，自动将网站中所有的Servlet对象进行销毁.。
 
 
+
+---
 
 # 二、请求与相应
 
@@ -213,6 +215,10 @@ public class OneServlet extends HttpServlet {
 3.在Http服务器准备推送Http响应协议包之前，负责将本次请求关联的【请求对象】和【响应对象】销毁
 
 ![image-20220429103448206](imgs/image-20220429103448206.png)
+
+
+
+---
 
 # 三、Servlet开发实战
 
@@ -509,6 +515,8 @@ public class AddUserController extends HttpServlet {
 
 
 
+---
+
 # 四、Servlet之间的调用
 
 ## 1、前提条件
@@ -563,6 +571,8 @@ dispatcher.forward(request，response);
      这些Servlet接收的请求方式与浏览器发送的请求方式保持一致
 
 
+
+---
 
 # 五、Servlet间的数据共享
 
@@ -761,6 +771,8 @@ class TwoServlet{
 ```
 
 
+
+---
 
 # 六、Servlet规范扩展
 
