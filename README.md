@@ -63,6 +63,7 @@
 ## 📙读书笔记
 
 - [MySQL技术内幕](notes/books/MySQL技术内幕)
+- [深入理解Java虚拟机](notes/books/深入理解Java虚拟机)
 
 ## 🙌其它
 
