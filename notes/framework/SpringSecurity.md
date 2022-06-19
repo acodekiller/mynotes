@@ -1,4 +1,4 @@
-# 一、基本概念
+一、基本概念
 
 ## 1、权限管理
 
@@ -3354,3 +3354,98 @@ public class WebMvcConfig{
 ```
 
 ## 3、Spring Security跨域解决方案
+
+### 1）原理分析
+
+当我们为项目添加了 Spring Security 依赖之后，发现上面三种跨域方式有的失效了，有的可以继续使用，这是怎么回事？
+
+通过@CrossOrigin 注解或者重写 addCorsMappings 方法配置跨域，统统失效了，通CorsFilter 配置的跨域，有没有失效则要看过滤器的优先级，如果过滤器优先级高于 SpringSecurity 过滤器，即先于 Spring Security 过滤器执行，则 CorsFiter 所配置的跨域处理依然有效；如果过滤器优先级低于 Spring Security 过滤器，则 CorsFilter 所配置的跨域处理就会失效。
+
+为了理清楚这个问题，我们先简略了解一下 Filter、DispatchserServlet 以及Interceptor 执行顺序。
+
+![image-20220521074711128](imgs/image-20220521074711128.png)
+
+理清楚了执行顺序，我们再来看跨域请求过程。由于非简单请求都要首先发送一个预检请求（request），而预检请求并不会携带认证信息，所以预检请求就有被 Spring Security 拦截的可能。因此通过@CrossOrigin 注解或者重写 addCorsMappings 方法配置跨域就会失效。如果使用 CorsFilter 配置的跨域，只要过滤器优先级高于 SpringSecurity 过滤器就不会有问题。反之同样会出现问题。
+
+### 2）解决方案
+
+Spring Security 中也提供了更专业的方式来解决预检请求所面临的问题。如：
+
+```java
+@Configuration
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+		@Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.authorizeRequests().anyRequest()
+                .authenticated()
+                .and()
+                .formLogin()
+                .and()
+                .cors() //跨域处理方案
+                .configurationSource(configurationSource())
+                .and()
+                .csrf().disable();
+    }
+
+    CorsConfigurationSource configurationSource() {
+        CorsConfiguration corsConfiguration = new CorsConfiguration();
+        corsConfiguration.setAllowedHeaders(Arrays.asList("*"));
+        corsConfiguration.setAllowedMethods(Arrays.asList("*"));
+        corsConfiguration.setAllowedOrigins(Arrays.asList("*"));
+        corsConfiguration.setMaxAge(3600L);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", corsConfiguration);
+        return source;
+    }
+}
+```
+
+
+
+---
+
+# 十二、异常处理
+
+## 1、异常体系
+
+Spring Security 中异常主要分为两大类:
+
+- AuthenticationException:  认证异常
+- AccessDeniedException:    授权异常
+
+其中认证所涉及异常类型比较多，默认提供的异常类型如下：
+
+![image-20220430213210778](imgs/image-20220430213210778.png)
+
+相比于认证异常，权限异常类就要少了很多，默认提供的权限异常如下：
+
+![image-20220430213344621](imgs/image-20220430213344621.png)
+
+在实际项目开发中，如果默认提供异常无法满足需求时，就需要根据实际需要来自定义异常类。
+
+## 2、自定义异常处理配置
+
+```java
+@Configuration
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http.authorizeRequests().anyRequest()
+                .authenticated()
+          			//.....
+                .and()
+                .exceptionHandling()//异常处理
+                .authenticationEntryPoint((request, response, e) -> {
+                  response.setContentType("application/json;charset=UTF-8");
+                  response.setStatus(HttpStatus.UNAUTHORIZED.value());
+                  response.getWriter().write("尚未认证，请进行认证操作！");
+                })
+                .accessDeniedHandler((request, response, e) -> {
+                  response.setContentType("application/json;charset=UTF-8");
+                  response.setStatus(HttpStatus.FORBIDDEN.value());
+                  response.getWriter().write("无权访问!");
+                });
+    }
+}
+```
+
