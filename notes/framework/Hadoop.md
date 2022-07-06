@@ -80,3 +80,38 @@ Hadoop三大发行版本：Apache、Cloudera、Hortonworks。
 
 4）高容错性：能够自动将失败的任务重新分配。
 
+## 4、Hadoop组成
+
+Hadoop1.x、2.x、3.x区别
+
+![image-20220630172725685](imgs/image-20220630172725685.png)
+
+### 1）HDFS架构
+
+Hadoop Distributed File System，简称 HDFS，是一个分布式文件系统。
+
+- **NameNode（nn）：**存储文件的元数据，如文件名，文件目录结构，文件属性（生成时间、副本数、 文件权限），以及每个文件的块列表和块所在的DataNode等；
+- **DataNode(dn)：**在本地文件系统存储文件块数据，以及块数据的校验和。
+- **Secondary NameNode(2nn)：**每隔一段时间对NameNode元数据备份。
+
+### 2）YARN架构
+
+Yet Another Resource Negotiator 简称 YARN ，另一种资源协调者，是 Hadoop 的资源管理器。
+
+- ResourceManager（RM）：整个集群资源（内存、CPU等）的老大；
+- NodeManager（N M）：单个节点服务器资源老大；
+- ApplicationMaster（AM）：单个任务运行的老大；
+- Container：容器，相当一台独立的服务器，里面封装了。
+
+### 3）MapReduce架构
+
+MapReduce 将计算过程分为两个阶段：Map 和 Reduce 
+
+1）Map 阶段并行处理输入数据 
+
+2）Reduce 阶段对 Map 结果进行汇总
+
+
+
+# 三、HDFS
+
